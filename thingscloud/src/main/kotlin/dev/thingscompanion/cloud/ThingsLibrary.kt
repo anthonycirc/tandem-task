@@ -171,7 +171,7 @@ class ThingsLibrary private constructor(
     /**
      * Whether the app may check or uncheck this to-do: plain to-dos, repeating instances whose
      * template repeats on a fixed schedule (as things3-cloud allows), and open instances of
-     * "after completion" templates repeating by days or weeks (checked as the Things apps do).
+     * "after completion" templates repeating by days, weeks or months (checked as the Things apps do).
      */
     fun canComplete(task: Task): Boolean {
         if (task.type != TaskType.TODO || task.trashed || task.isRecurrenceTemplate || task.repeatType != null) return false
@@ -186,12 +186,12 @@ class ThingsLibrary private constructor(
     }
 
     /**
-     * For an instance of an "after completion" template repeating by days or weeks: the template
+     * For an instance of an "after completion" template repeating by days, weeks or months: the template
      * and its rule, which checking the instance must move on (see [TaskEdits.afterCompletion]).
      */
     fun afterCompletionRule(task: Task): Pair<Task, RepeatRule>? {
         val template = task.recurrenceTemplateIds.singleOrNull()?.let(tasks::get) ?: return null
-        val rule = repeatRule(template)?.takeIf { it.afterCompletion && (it.unit == RepeatUnit.DAY || it.unit == RepeatUnit.WEEK) } ?: return null
+        val rule = repeatRule(template)?.takeIf { it.afterCompletion && it.unit != RepeatUnit.YEAR } ?: return null
         return template to rule
     }
 

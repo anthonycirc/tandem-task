@@ -26,6 +26,7 @@ class MakeRepeatTest {
         "r": {"t": 0, "e": "Task7", "p": {"tt": "R3", "st": 1, "sr": $d16, "tir": $d16, "ix": -1687, "ti": -967, "ato": 54000, "tg": ["tag"], "pr": ["proj"]}},
         "c1": {"t": 0, "e": "ChecklistItem3", "p": {"tt": "One", "ts": ["r"], "ix": -622, "ss": 0}},
         "c2": {"t": 0, "e": "ChecklistItem3", "p": {"tt": "Two", "ts": ["r"], "ix": 0, "ss": 3}},
+        "end": {"t": 0, "e": "Task7", "p": {"tt": "End", "st": 1, "sr": ${d16 + 14 * day}}},
         "undated": {"t": 0, "e": "Task7", "p": {"tt": "Someday", "st": 2}},
         "deadline": {"t": 0, "e": "Task7", "p": {"tt": "Due", "st": 1, "sr": $d16, "dd": ${d16 + 10 * day}}}
     }"""
@@ -88,7 +89,7 @@ class MakeRepeatTest {
         assertFailsWith<IllegalArgumentException> { make("undated") }
         assertFailsWith<IllegalArgumentException> { make("deadline") }
         assertFailsWith<IllegalArgumentException> { make(rule = RepeatRule(RepeatUnit.MONTH, every = 1, afterCompletion = true, monthDay = 1)) }
-        assertFailsWith<IllegalArgumentException> { make(rule = RepeatRule(RepeatUnit.MONTH, every = 1, afterCompletion = false, monthDay = 16)) }
+        assertFailsWith<IllegalArgumentException> { make(rule = RepeatRule(RepeatUnit.YEAR, every = 1, afterCompletion = false, monthDay = 16, month = java.time.Month.NOVEMBER)) }
     }
 
     // Pinned to R6 and R7 (repeat-rules.md L10): made to repeat on Monday 2026-11-16, on a fixed schedule.
@@ -145,5 +146,61 @@ class MakeRepeatTest {
         assertNull(PendingChange.MakeRepeating("op", "r", "T", weeklyAfter, listOf("n1", "n2")).build(lib, now))
         assertTrue(lib.task("r")!!.recurrenceTemplateIds == listOf("T"))
         assertTrue(lib.task("T")!!.isRecurrenceTemplate)
+    }
+
+    // Pinned to R10, R11 and R13 (repeat-rules.md L14): made to repeat on Monday 2026-11-16, the 3rd Monday.
+
+    private fun rr(of: String, start: Long = d16, tp: Int = 0, ia: Long = start, fa: Int = 1) =
+        Json.parseToJsonElement("""{"ed": 64092211200, "fa": $fa, "fu": 8, "ia": $ia, "of": $of, "rc": 0, "rrv": 4, "sr": $start, "tp": $tp, "ts": 0}""")
+
+    private fun monthly(monthDay: Int? = null, ordinal: Int? = null, weekday: DayOfWeek? = null, every: Int = 1, after: Boolean = false) =
+        RepeatRule(RepeatUnit.MONTH, every, after, weekdays = listOfNotNull(weekday), monthDay = monthDay, weekdayOrdinal = ordinal)
+
+    @Test
+    fun `every month on the to-do's day, as Things wrote it for R10`() {
+        val t = p(make(rule = monthly(monthDay = 16))!!, "T")
+        assertEquals(rr("""[{"dy": 15}]"""), t["rr"])
+        assertEquals(JsonPrimitive(d16 + 30 * day), t["tir"])
+        assertEquals(JsonPrimitive(d16 + 30 * day), t["icsd"])
+    }
+
+    @Test
+    fun `every month on the third Monday, as Things wrote it for R11`() {
+        val t = p(make(rule = monthly(ordinal = 3, weekday = DayOfWeek.MONDAY))!!, "T")
+        assertEquals(rr("""[{"wd": 1, "wdo": 3}]"""), t["rr"])
+        assertEquals(JsonPrimitive(d16 + 35 * day), t["tir"])
+    }
+
+    @Test
+    fun `every month after completion, as Things wrote it for R13`() {
+        val t = p(make(rule = monthly(after = true))!!, "T")
+        assertEquals(rr("[]", tp = 1, ia = 0), t["rr"])
+        assertEquals(JsonPrimitive(d16 + day), t["icsd"])
+        assertEquals(JsonNull, t["tir"])
+    }
+
+    @Test
+    fun `every month on the last day, from a to-do on the last day`() {
+        val t = p(make("end", monthly(monthDay = -1))!!, "T")
+        assertEquals(rr("""[{"dy": -1}]""", start = d16 + 14 * day), t["rr"])
+        assertEquals(JsonPrimitive(d16 + 45 * day), t["tir"])
+    }
+
+    @Test
+    fun `every N months lands on the rule's day N months later`() {
+        assertEquals(JsonPrimitive(d16 + 61 * day), p(make(rule = monthly(monthDay = 16, every = 2))!!, "T")["tir"])
+        assertEquals(rr("""[{"dy": 15}]""", fa = 2), p(make(rule = monthly(monthDay = 16, every = 2))!!, "T")["rr"])
+        // The 3rd Monday of January 2027 is the 18th.
+        assertEquals(JsonPrimitive(d16 + 63 * day), p(make(rule = monthly(ordinal = 3, weekday = DayOfWeek.MONDAY, every = 2))!!, "T")["tir"])
+    }
+
+    @Test
+    fun `monthly rules the to-do's day is not an occurrence of are refused`() {
+        assertFailsWith<IllegalArgumentException> { make(rule = monthly(monthDay = 15)) }
+        assertFailsWith<IllegalArgumentException> { make(rule = monthly(monthDay = -1)) }
+        assertFailsWith<IllegalArgumentException> { make(rule = monthly(ordinal = 2, weekday = DayOfWeek.MONDAY)) }
+        assertFailsWith<IllegalArgumentException> { make(rule = monthly(ordinal = 3, weekday = DayOfWeek.TUESDAY)) }
+        assertFailsWith<IllegalArgumentException> { make(rule = monthly()) }
+        assertFailsWith<IllegalArgumentException> { make(rule = monthly(monthDay = 16, after = true)) }
     }
 }

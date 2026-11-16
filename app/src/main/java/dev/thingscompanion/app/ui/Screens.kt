@@ -753,9 +753,10 @@ private fun MoveDialog(library: ThingsLibrary, item: Task, onPick: (PendingChang
 }
 
 /**
- * How a to-do repeats, from the app: every N days or weeks, on a fixed schedule (weekly on
- * chosen days) or after completion. The rule starts on the to-do's day, [start], which a weekly
- * schedule always includes; months and years are set in Things.
+ * How a to-do repeats, from the app: every N days, weeks or months, on a fixed schedule (weekly
+ * on chosen days, monthly on the to-do's day of the month, its weekday's rank, or the last day)
+ * or after completion. The rule starts on the to-do's day, [start], which a fixed schedule always
+ * includes; years are set in Things.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -766,10 +767,21 @@ private fun RepeatDialog(start: LocalDate, onPick: (RepeatRule) -> Unit, onDismi
     var every by rememberSaveable { mutableIntStateOf(1) }
     var afterCompletion by rememberSaveable { mutableStateOf(false) }
     var days by rememberSaveable { mutableStateOf(listOf(start.dayOfWeek.value)) }
+    // Monthly: 0 on the day of the month, 1 on the weekday's rank, 2 on the last day.
+    var monthPattern by rememberSaveable { mutableIntStateOf(0) }
     val weekly = unit == RepeatUnit.WEEK && !afterCompletion
+    val monthly = unit == RepeatUnit.MONTH && !afterCompletion
+    val rank = (start.dayOfMonth - 1) / 7 + 1
+    val isLastDay = start.dayOfMonth == start.lengthOfMonth()
     // Several days only every week: which week Things counts from is unknown.
     val chosen = if (every > 1) listOf(start.dayOfWeek.value) else days
-    val rule = RepeatRule(unit, every, afterCompletion, weekdays = if (weekly) chosen.sorted().map(DayOfWeek::of) else emptyList())
+    val rule = when {
+        weekly -> RepeatRule(unit, every, false, weekdays = chosen.sorted().map(DayOfWeek::of))
+        monthly && monthPattern == 1 -> RepeatRule(unit, every, false, weekdays = listOf(start.dayOfWeek), weekdayOrdinal = rank)
+        monthly && monthPattern == 2 -> RepeatRule(unit, every, false, monthDay = -1)
+        monthly -> RepeatRule(unit, every, false, monthDay = start.dayOfMonth)
+        else -> RepeatRule(unit, every, afterCompletion)
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.repeat_title)) },
@@ -778,6 +790,7 @@ private fun RepeatDialog(start: LocalDate, onPick: (RepeatRule) -> Unit, onDismi
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = unit == RepeatUnit.DAY, onClick = { unit = RepeatUnit.DAY }, label = { Text(stringResource(R.string.repeat_unit_days)) })
                     FilterChip(selected = unit == RepeatUnit.WEEK, onClick = { unit = RepeatUnit.WEEK }, label = { Text(stringResource(R.string.repeat_unit_weeks)) })
+                    FilterChip(selected = unit == RepeatUnit.MONTH, onClick = { unit = RepeatUnit.MONTH }, label = { Text(stringResource(R.string.repeat_unit_months)) })
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { if (every > 1) every-- }, enabled = every > 1) { Text("−") }
@@ -795,6 +808,18 @@ private fun RepeatDialog(start: LocalDate, onPick: (RepeatRule) -> Unit, onDismi
                                 label = { Text(day.getDisplayName(TextStyle.SHORT, locale)) },
                             )
                         }
+                    }
+                }
+                if (monthly) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(selected = monthPattern == 0, onClick = { monthPattern = 0 }, label = { Text(stringResource(R.string.repeat_pick_day, start.dayOfMonth)) })
+                        // A fifth weekday is not in every month.
+                        if (rank <= 4) FilterChip(
+                            selected = monthPattern == 1,
+                            onClick = { monthPattern = 1 },
+                            label = { Text(stringResource(R.string.repeat_pick_nth, ordinalName(context, rank), start.dayOfWeek.getDisplayName(TextStyle.FULL, locale))) },
+                        )
+                        if (isLastDay) FilterChip(selected = monthPattern == 2, onClick = { monthPattern = 2 }, label = { Text(stringResource(R.string.repeat_pick_last)) })
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {

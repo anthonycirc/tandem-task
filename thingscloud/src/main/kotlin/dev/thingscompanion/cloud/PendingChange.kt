@@ -319,12 +319,14 @@ sealed interface PendingChange {
         val checklistIds: List<String>,
         /** ISO day numbers (1 Monday .. 7 Sunday) of a fixed weekly rule. */
         val weekdays: List<Int> = emptyList(),
+        val monthDay: Int? = null,
+        val weekdayOrdinal: Int? = null,
     ) : PendingChange {
         override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
             val task = library.task(taskId) ?: throw NoSuchElementException("The to-do no longer exists.")
             if (templateId in task.recurrenceTemplateIds) return null
             require(library.canMakeRepeating(task)) { "This to-do can't be made to repeat from the app." }
-            val rule = RepeatRule(unit, every, afterCompletion, weekdays.map(DayOfWeek::of))
+            val rule = RepeatRule(unit, every, afterCompletion, weekdays.map(DayOfWeek::of), monthDay = monthDay, weekdayOrdinal = weekdayOrdinal)
             require(TaskEdits.canWriteRule(rule, task.startDate!!)) { "This repeat can't be set from the app yet." }
             val checklist = library.checklist(taskId)
             require(checklist.size <= checklistIds.size) { "The checklist changed; try again." }
@@ -333,7 +335,7 @@ sealed interface PendingChange {
 
         companion object {
             operator fun invoke(opId: String, taskId: String, templateId: String, rule: RepeatRule, checklistIds: List<String>) =
-                MakeRepeating(opId, taskId, templateId, rule.unit, rule.every, rule.afterCompletion, checklistIds, rule.weekdays.map { it.value })
+                MakeRepeating(opId, taskId, templateId, rule.unit, rule.every, rule.afterCompletion, checklistIds, rule.weekdays.map { it.value }, rule.monthDay, rule.weekdayOrdinal)
         }
     }
 

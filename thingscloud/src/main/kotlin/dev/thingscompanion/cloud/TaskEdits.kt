@@ -55,10 +55,11 @@ object TaskEdits {
      * instance starts; a Things client creates it then). No `md`, as they write it.
      */
     fun afterCompletion(template: Task, rule: RepeatRule, completedOn: LocalDate): JsonObject {
-        val days = when (rule.unit) {
-            RepeatUnit.DAY -> rule.every.toLong()
-            RepeatUnit.WEEK -> 7L * rule.every
-            else -> throw IllegalArgumentException("Only daily and weekly repeats are checked from the app.")
+        val next = when (rule.unit) {
+            RepeatUnit.DAY -> completedOn.plusDays(rule.every.toLong())
+            RepeatUnit.WEEK -> completedOn.plusWeeks(rule.every.toLong())
+            RepeatUnit.MONTH -> completedOn.plusMonths(rule.every.toLong())
+            else -> throw IllegalArgumentException("Yearly repeats are checked in Things.")
         }
         fun midnight(date: LocalDate) = JsonPrimitive(date.toEpochDay() * InboxTask.SECONDS_PER_DAY)
         return buildJsonObject {
@@ -66,21 +67,25 @@ object TaskEdits {
             put("e", template.entity)
             put("p", buildJsonObject {
                 put("acrd", midnight(completedOn))
-                put("tir", midnight(completedOn.plusDays(days)))
+                put("tir", midnight(next))
             })
         }
     }
 
     /**
-     * The rules the app writes for a to-do on [start], by days or weeks with no end: after
-     * completion, or on a fixed schedule that [start] is part of (a weekly one on several days
-     * only every week, since which week Things counts from is unknown).
+     * The rules the app writes for a to-do on [start], by days, weeks or months with no end: after
+     * completion, or on a fixed schedule that [start] is an occurrence of (a weekly one on several
+     * days only every week, since which week Things counts from is unknown).
      */
     fun canWriteRule(rule: RepeatRule, start: LocalDate): Boolean {
-        if ((rule.unit != RepeatUnit.DAY && rule.unit != RepeatUnit.WEEK) || rule.every !in 1..365 || rule.endDate != null) return false
-        return if (rule.afterCompletion) rule.weekdays.isEmpty()
-        else (rule.unit == RepeatUnit.DAY && rule.weekdays.isEmpty()) ||
-            (start.dayOfWeek in rule.weekdays && rule.nextAfter(start) != null)
+        if (rule.unit == RepeatUnit.YEAR || rule.every !in 1..365 || rule.endDate != null) return false
+        val plain = rule.monthDay == null && rule.weekdayOrdinal == null
+        return when {
+            rule.afterCompletion -> plain && rule.weekdays.isEmpty()
+            rule.unit == RepeatUnit.DAY -> plain && rule.weekdays.isEmpty()
+            rule.unit == RepeatUnit.WEEK -> plain && start.dayOfWeek in rule.weekdays && rule.nextAfter(start) != null
+            else -> rule.fallsOn(start) && rule.nextAfter(start) != null
+        }
     }
 
     /**

@@ -52,8 +52,15 @@ class RepeatCompleteTest {
     }
 
     @Test
-    fun `monthly and yearly after-completion repeats stay with Things`() {
-        for (unit in listOf(8, 4)) {
+    fun `monthly after-completion repeats move on by months, as Things wrote it for R13`() {
+        assertEquals(JsonPrimitive(d15 + 30 * day), props(complete("""{"tp": 1, "fu": 8, "fa": 1}"""), "tmpl")["tir"])
+        assertEquals(JsonPrimitive(d15 + 61 * day), props(complete("""{"tp": 1, "fu": 8, "fa": 2}"""), "tmpl")["tir"])
+        assertEquals(JsonPrimitive(d15), props(complete("""{"tp": 1, "fu": 8, "fa": 1}"""), "tmpl")["acrd"])
+    }
+
+    @Test
+    fun `yearly after-completion repeats stay with Things`() {
+        for (unit in listOf(4)) {
             val lib = library("""{"tp": 1, "fu": $unit, "fa": 1}""")
             assertFalse(lib.canComplete(lib.task("inst")!!), "fu $unit")
             assertFailsWith<IllegalArgumentException> { PendingChange.SetDone("op", "inst", true).build(lib, now) }

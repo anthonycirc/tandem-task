@@ -2,6 +2,14 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.4] - 2026-11-16
+
+### Added
+
+- **Monthly repeats.** The repeat button now also sets "every N months": on the to-do's day of the month, on its weekday's rank ("the third Monday"), on the last day when the to-do is on it, or after completion, written as Things 3 writes it.
+- **Check off monthly "repeat after completion" to-dos**: the next one comes N months after the day it was checked, as in Things.
+- Rules on a weekday's rank ("every month on the third Monday") are now shown in full.
+
 ## [0.3.3] - 2026-11-16
 
 ### Added

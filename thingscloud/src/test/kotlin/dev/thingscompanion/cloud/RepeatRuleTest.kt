@@ -90,6 +90,7 @@ class RepeatRuleTest {
             RepeatRule(RepeatUnit.WEEK, every = 2, afterCompletion = true),
             RepeatRule(RepeatUnit.MONTH, every = 1, afterCompletion = false, monthDay = 15),
             RepeatRule(RepeatUnit.MONTH, every = 3, afterCompletion = false, monthDay = -1),
+            RepeatRule(RepeatUnit.MONTH, every = 1, afterCompletion = false, weekdays = listOf(DayOfWeek.MONDAY), weekdayOrdinal = 3),
             RepeatRule(RepeatUnit.YEAR, every = 1, afterCompletion = false, monthDay = 5, month = Month.MARCH),
             RepeatRule(RepeatUnit.DAY, every = 1, afterCompletion = false, endDate = LocalDate.of(2027, 1, 31)),
         )

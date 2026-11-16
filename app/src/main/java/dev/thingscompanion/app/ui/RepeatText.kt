@@ -19,7 +19,10 @@ fun describeRepeat(context: Context, rule: RepeatRule): String {
         RepeatUnit.MONTH -> if (n == 1) context.getString(R.string.repeat_monthly) else context.getString(R.string.repeat_months, n)
         RepeatUnit.YEAR -> if (n == 1) context.getString(R.string.repeat_yearly) else context.getString(R.string.repeat_years, n)
     }
-    if (rule.weekdays.isNotEmpty()) {
+    val ordinal = rule.weekdayOrdinal
+    if (ordinal != null && rule.weekdays.size == 1) {
+        text = context.getString(R.string.repeat_on_nth, text, ordinalName(context, ordinal), rule.weekdays.single().getDisplayName(TextStyle.FULL, locale))
+    } else if (rule.weekdays.isNotEmpty()) {
         val days = rule.weekdays.joinToString(", ") { it.getDisplayName(TextStyle.FULL, locale) }
         text = context.getString(R.string.repeat_on, text, days)
     } else if (rule.month != null && rule.monthDay != null && rule.monthDay!! > 0) {
@@ -35,4 +38,14 @@ fun describeRepeat(context: Context, rule: RepeatRule): String {
     if (rule.afterCompletion) text = context.getString(R.string.repeat_after_completion, text)
     rule.endDate?.let { text = context.getString(R.string.repeat_until, text, it.format(dateFormat)) }
     return text
+}
+
+/** "first" .. "fourth", or "last" for -1, as a monthly rule names the weekday's rank. */
+fun ordinalName(context: Context, ordinal: Int): String = when (ordinal) {
+    1 -> context.getString(R.string.repeat_ordinal_1)
+    2 -> context.getString(R.string.repeat_ordinal_2)
+    3 -> context.getString(R.string.repeat_ordinal_3)
+    4 -> context.getString(R.string.repeat_ordinal_4)
+    5 -> context.getString(R.string.repeat_ordinal_5)
+    else -> context.getString(R.string.repeat_ordinal_last)
 }

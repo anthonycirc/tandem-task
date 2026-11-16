@@ -164,7 +164,18 @@
     <string name="repeat_title">Répéter</string>
     <string name="repeat_unit_days">Jours</string>
     <string name="repeat_unit_weeks">Semaines</string>
-    <string name="repeat_app_limits">Commence le jour de la tâche. Les répétitions par mois ou par année se règlent dans Things.</string>
+    <string name="repeat_app_limits">Commence le jour de la tâche. Les répétitions par année se règlent dans Things.</string>
     <string name="repeat_after_completion_toggle">Après achèvement</string>
+    <string name="repeat_unit_months">Mois</string>
+    <string name="repeat_on_nth">%1$s le %2$s %3$s</string>
+    <string name="repeat_ordinal_1">premier</string>
+    <string name="repeat_ordinal_2">deuxième</string>
+    <string name="repeat_ordinal_3">troisième</string>
+    <string name="repeat_ordinal_4">quatrième</string>
+    <string name="repeat_ordinal_5">cinquième</string>
+    <string name="repeat_ordinal_last">dernier</string>
+    <string name="repeat_pick_day">Le %1$d</string>
+    <string name="repeat_pick_nth">Le %1$s %2$s</string>
+    <string name="repeat_pick_last">Le dernier jour</string>
     <string name="now_repeats">Répétition activée</string>
 </resources>
