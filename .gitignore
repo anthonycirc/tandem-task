@@ -8,3 +8,6 @@ local.properties
 
 # Working notes (kept locally)
 odd/
+
+# Smoke tool output: your Things data, kept out of build/ so a clean does not erase it
+thingscloud/smoke/

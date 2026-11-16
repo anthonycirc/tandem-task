@@ -161,4 +161,9 @@
         <item quantity="other">Ses %1$d projets et tâches vont dans la corbeille. La zone elle-même ne pourra pas être restaurée.</item>
     </plurals>
     <string name="list_areas">Zones</string>
+    <string name="repeat_title">Répéter</string>
+    <string name="repeat_unit_days">Jours</string>
+    <string name="repeat_unit_weeks">Semaines</string>
+    <string name="repeat_app_limits">Commence le jour de la tâche. Les autres répétitions (jours fixes, mois, années) se règlent dans Things.</string>
+    <string name="now_repeats">Répétition activée</string>
 </resources>

@@ -159,4 +159,9 @@
         <item quantity="other">Its %1$d projects and to-dos go to the Trash. The area itself can\'t be restored.</item>
     </plurals>
     <string name="list_areas">Areas</string>
+    <string name="repeat_title">Repeat</string>
+    <string name="repeat_unit_days">Days</string>
+    <string name="repeat_unit_weeks">Weeks</string>
+    <string name="repeat_app_limits">Starts on the to-do\'s day. Other repeats (fixed days, months, years) are set in Things.</string>
+    <string name="now_repeats">Now repeats</string>
 </resources>

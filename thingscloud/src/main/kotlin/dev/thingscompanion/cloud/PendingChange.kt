@@ -301,6 +301,39 @@ sealed interface PendingChange {
         }
     }
 
+    /**
+     * Makes a dated to-do repeat, as Things 3 does: a new template copied from it (with copies of
+     * its checklist items, [checklistIds] in checklist order) and the to-do linked to it as its
+     * first occurrence. Things clients create the next occurrences from the template.
+     */
+    @Serializable
+    @SerialName("make_repeating")
+    data class MakeRepeating(
+        override val opId: String,
+        val taskId: String,
+        val templateId: String,
+        val unit: RepeatUnit,
+        val every: Int,
+        val afterCompletion: Boolean,
+        val checklistIds: List<String>,
+    ) : PendingChange {
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            val task = library.task(taskId) ?: throw NoSuchElementException("The to-do no longer exists.")
+            if (templateId in task.recurrenceTemplateIds) return null
+            require(library.canMakeRepeating(task)) { "This to-do can't be made to repeat from the app." }
+            val rule = RepeatRule(unit, every, afterCompletion)
+            require(TaskEdits.canWriteRule(rule)) { "This repeat can't be set from the app yet." }
+            val checklist = library.checklist(taskId)
+            require(checklist.size <= checklistIds.size) { "The checklist changed; try again." }
+            return TaskEdits.makeRepeating(task, checklist, templateId, checklistIds, rule, now)
+        }
+
+        companion object {
+            operator fun invoke(opId: String, taskId: String, templateId: String, rule: RepeatRule, checklistIds: List<String>) =
+                MakeRepeating(opId, taskId, templateId, rule.unit, rule.every, rule.afterCompletion, checklistIds)
+        }
+    }
+
     @Serializable
     @SerialName("trash")
     data class SetTrashed(override val opId: String, val taskId: String, val trashed: Boolean) : PendingChange {

@@ -208,6 +208,14 @@ class ThingsLibrary private constructor(
             (it.type == TaskType.HEADING || (it.isTodo && canComplete(it)))
     }
 
+    /**
+     * To-dos the app may make repeat: open, dated (the rule starts on that day), not repeating
+     * yet, and without a deadline (Things turns it into a lead time the app doesn't write).
+     */
+    fun canMakeRepeating(task: Task): Boolean =
+        task.isTodo && task.isOpen && !task.trashed && task.isCurrentEntity && task.startDate != null && task.deadline == null &&
+            !task.isRepeating
+
     /** To-dos the app may file elsewhere: not repeating templates, not trashed. */
     fun canMove(task: Task): Boolean =
         task.isTodo && !task.trashed && !task.isRecurrenceTemplate && task.repeatType == null && task.isCurrentEntity

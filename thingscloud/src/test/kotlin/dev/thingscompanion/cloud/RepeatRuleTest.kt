@@ -70,4 +70,32 @@ class RepeatRuleTest {
     fun `an unknown unit gives no rule rather than a wrong one`() {
         assertNull(rule("""{"tp": 0, "fu": 999, "fa": 1}"""))
     }
+
+    @Test
+    fun `a daily after-completion rule matches the wire item Things wrote for the user's test to-do`() {
+        val start = java.time.LocalDate.of(2026, 11, 16)
+        // From the history item that created it on the Mac on 2026-11-16, no occurrence yet (L3).
+        val expected = Json.parseToJsonElement(
+            """{"ia": 0, "rrv": 4, "tp": 1, "ts": 0, "fu": 16, "sr": 1794787200, "fa": 1, "rc": 0, "of": [], "ed": 64092211200}""",
+        )
+        assertEquals(expected, RepeatRule(RepeatUnit.DAY, every = 1, afterCompletion = true).toRr(start, anchor = null))
+    }
+
+    @Test
+    fun `rules written by the app read back the same`() {
+        val start = java.time.LocalDate.of(2026, 11, 16)
+        val rules = listOf(
+            RepeatRule(RepeatUnit.DAY, every = 3, afterCompletion = false),
+            RepeatRule(RepeatUnit.WEEK, every = 1, afterCompletion = false, weekdays = listOf(DayOfWeek.MONDAY, DayOfWeek.SUNDAY)),
+            RepeatRule(RepeatUnit.WEEK, every = 2, afterCompletion = true),
+            RepeatRule(RepeatUnit.MONTH, every = 1, afterCompletion = false, monthDay = 15),
+            RepeatRule(RepeatUnit.MONTH, every = 3, afterCompletion = false, monthDay = -1),
+            RepeatRule(RepeatUnit.YEAR, every = 1, afterCompletion = false, monthDay = 5, month = Month.MARCH),
+            RepeatRule(RepeatUnit.DAY, every = 1, afterCompletion = false, endDate = LocalDate.of(2027, 1, 31)),
+        )
+        for (rule in rules) {
+            val lib = library("""{"t": {"t": 0, "e": "Task7", "p": {"tt": "T", "st": 1, "rr": ${rule.toRr(start, anchor = start)}}}}""")
+            assertEquals(rule, lib.repeatRule(lib.task("t")!!), rule.toString())
+        }
+    }
 }

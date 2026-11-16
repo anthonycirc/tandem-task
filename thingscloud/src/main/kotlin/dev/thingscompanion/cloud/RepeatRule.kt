@@ -2,17 +2,21 @@ package dev.thingscompanion.cloud
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.Month
 
+@kotlinx.serialization.Serializable
 enum class RepeatUnit { DAY, WEEK, MONTH, YEAR }
 
 /**
- * How a repeating to-do repeats, read from its template's `rr` (display only; the app does not
- * write rules). [monthDay] is 1-based, -1 meaning the month's last day; [month] is for yearly rules.
+ * How a repeating to-do repeats, read from (and written to) its template's `rr`. [monthDay] is 1-based, -1 meaning the month's last day; [month] is for yearly rules.
  */
 data class RepeatRule(
     val unit: RepeatUnit,
@@ -23,6 +27,34 @@ data class RepeatRule(
     val month: Month? = null,
     val endDate: LocalDate? = null,
 ) {
+    /**
+     * The `rr` for this rule, starting on [start]: the inverse of [parse]. [anchor] is `ia`,
+     * which Things sets to the first occurrence's day when it makes a to-do repeat (and to 0 when
+     * it creates a repeating to-do with no occurrence yet). `rc` 0, `rrv` 4 and `ts` 0 are the
+     * constants of every day and week rule in the user's history.
+     */
+    fun toRr(start: LocalDate, anchor: LocalDate?): JsonObject = buildJsonObject {
+        put("ed", endDate?.let { it.toEpochDay() * 86_400 } ?: NEVER)
+        put("fa", every)
+        put("fu", when (unit) { RepeatUnit.DAY -> 16; RepeatUnit.WEEK -> 256; RepeatUnit.MONTH -> 8; RepeatUnit.YEAR -> 4 })
+        put("ia", anchor?.let { it.toEpochDay() * 86_400 } ?: 0L)
+        putJsonArray("of") {
+            when (unit) {
+                RepeatUnit.DAY -> Unit
+                RepeatUnit.WEEK -> weekdays.forEach { day -> addJsonObject { put("wd", day.value % 7) } }
+                RepeatUnit.MONTH, RepeatUnit.YEAR -> if (monthDay != null) addJsonObject {
+                    put("dy", if (monthDay < 0) -1 else monthDay - 1)
+                    month?.let { put("mo", it.value - 1) }
+                }
+            }
+        }
+        put("rc", 0)
+        put("rrv", 4)
+        put("sr", start.toEpochDay() * 86_400)
+        put("tp", if (afterCompletion) 1 else 0)
+        put("ts", 0)
+    }
+
     companion object {
         /** `ed` Things writes for "never ends" (year 4001). */
         private const val NEVER = 64_092_211_200L

@@ -71,6 +71,72 @@ object TaskEdits {
         }
     }
 
+    /** The rules the app writes: by days or weeks, after completion (the only ones seen made by Things 3 lately). */
+    fun canWriteRule(rule: RepeatRule): Boolean =
+        rule.afterCompletion && (rule.unit == RepeatUnit.DAY || rule.unit == RepeatUnit.WEEK) &&
+            rule.every in 1..365 && rule.weekdays.isEmpty() && rule.endDate == null
+
+    /**
+     * What Things 3 writes when a dated to-do is made to repeat (pattern seen for R1-R4): a
+     * template copied from it, undated (`st` 2), first instance created (`icc` 1), next
+     * creation the day after (`icsd`), with copies of its checklist items; and on the to-do
+     * only `rt`, no `md`.
+     */
+    fun makeRepeating(
+        task: Task,
+        checklist: List<ChecklistItem>,
+        templateId: String,
+        checklistIds: List<String>,
+        rule: RepeatRule,
+        now: Double,
+    ): Map<String, JsonObject> {
+        val start = requireNotNull(task.startDate) { "A repeat starts on the to-do's day." }
+        val base = InboxTask.payload(
+            task.title, task.notes.orEmpty(), task.index, now, Schedule.Someday,
+            projectId = task.projectId.takeIf { task.headingId == null },
+            areaId = task.areaId.takeIf { task.projectId == null && task.headingId == null },
+            headingId = task.headingId,
+        )
+        val props = (base["p"] as JsonObject).toMutableMap()
+        props["ato"] = task.reminder?.let { JsonPrimitive(it.toSecondOfDay()) } ?: JsonNull
+        props["tg"] = JsonArray(task.tagIds.map(::JsonPrimitive))
+        props["icsd"] = JsonPrimitive(start.plusDays(1).toEpochDay() * InboxTask.SECONDS_PER_DAY)
+        props["icc"] = JsonPrimitive(1)
+        props["ti"] = JsonPrimitive(task.todayIndex)
+        props["rr"] = rule.toRr(start, anchor = null)
+        val template = buildJsonObject {
+            put("t", 0)
+            put("e", "Task7")
+            put("p", JsonObject(props))
+        }
+        val copies = checklist.zip(checklistIds).associate { (item, id) ->
+            id to buildJsonObject {
+                put("t", 0)
+                put("e", "ChecklistItem3")
+                put("p", buildJsonObject {
+                    put("cd", InboxTask.plainNumber(now))
+                    put("ix", item.index)
+                    put("lt", false)
+                    put("md", InboxTask.plainNumber(now))
+                    put("sp", JsonNull)
+                    put("ss", 0)
+                    put("ts", JsonArray(listOf(JsonPrimitive(templateId))))
+                    put("tt", item.title)
+                    put("xx", buildJsonObject {
+                        put("_t", "oo")
+                        put("sn", JsonObject(emptyMap()))
+                    })
+                })
+            }
+        }
+        val link = buildJsonObject {
+            put("t", 1)
+            put("e", task.entity)
+            put("p", buildJsonObject { put("rt", JsonArray(listOf(JsonPrimitive(templateId)))) })
+        }
+        return mapOf(templateId to template) + copies + (task.id to link)
+    }
+
     /** Open, completed or cancelled (`ss` 0, 3, 2), with the stop date Things writes (`sp`). */
     fun setStatus(task: Task, status: TaskStatus, now: Double): JsonObject = update(
         task,

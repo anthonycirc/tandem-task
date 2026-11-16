@@ -39,6 +39,10 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import dev.thingscompanion.cloud.RepeatUnit
+import dev.thingscompanion.cloud.RepeatRule
 import dev.thingscompanion.cloud.Area
 import androidx.compose.ui.draw.shadow
 import androidx.compose.runtime.toMutableStateList
@@ -208,6 +212,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     var addingProject by rememberSaveable { mutableStateOf(false) }
     var naming by remember { mutableStateOf<NameRequest?>(null) }
     var movingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var repeatingId by rememberSaveable { mutableStateOf<String?>(null) }
     var deletingAreaId by rememberSaveable { mutableStateOf<String?>(null) }
 
     // A widget tap asked to open the add form or a to-do.
@@ -262,6 +267,16 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
             onDismiss = { addingProject = false },
         )
         return
+    }
+    val repeating = repeatingId?.let { library?.task(it) }
+    if (repeating != null) {
+        RepeatDialog(
+            onPick = { rule ->
+                repeatingId = null
+                viewModel.makeRepeating(repeating.id, rule)
+            },
+            onDismiss = { repeatingId = null },
+        )
     }
     val moving = movingId?.let { library?.task(it) }
     if (moving != null && library != null) {
@@ -473,6 +488,12 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                         if (openTask.type == TaskType.TODO && !openTask.trashed) {
                             IconButton(onClick = { editingId = openTask.id }) {
                                 Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.edit))
+                            }
+                        }
+                        if (library.canMakeRepeating(openTask)) {
+                            val repeatLabel = stringResource(R.string.repeat_title)
+                            IconButton(onClick = { repeatingId = openTask.id }, modifier = Modifier.semantics { contentDescription = repeatLabel }) {
+                                RepeatGlyph(LocalContentColor.current, size = 22.dp)
                             }
                         }
                         if (library.canMove(openTask)) {
@@ -723,6 +744,39 @@ private fun MoveDialog(library: ThingsLibrary, item: Task, onPick: (PendingChang
             }
         },
         confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+/**
+ * How a to-do repeats, from the app: every N days or weeks, after completion (the rules whose
+ * writes are known). The rule starts on the to-do's day; other rules are set in Things.
+ */
+@Composable
+private fun RepeatDialog(onPick: (RepeatRule) -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var unit by rememberSaveable { mutableStateOf(RepeatUnit.DAY) }
+    var every by rememberSaveable { mutableIntStateOf(1) }
+    val rule = RepeatRule(unit, every, afterCompletion = true)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.repeat_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = unit == RepeatUnit.DAY, onClick = { unit = RepeatUnit.DAY }, label = { Text(stringResource(R.string.repeat_unit_days)) })
+                    FilterChip(selected = unit == RepeatUnit.WEEK, onClick = { unit = RepeatUnit.WEEK }, label = { Text(stringResource(R.string.repeat_unit_weeks)) })
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { if (every > 1) every-- }, enabled = every > 1) { Text("−") }
+                    Text(every.toString(), style = MaterialTheme.typography.titleMedium)
+                    TextButton(onClick = { if (every < 30) every++ }) { Text("+") }
+                }
+                Text(describeRepeat(context, rule), style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.repeat_app_limits), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = { TextButton(onClick = { onPick(rule) }) { Text(stringResource(R.string.save)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }

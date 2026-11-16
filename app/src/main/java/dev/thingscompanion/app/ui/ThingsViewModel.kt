@@ -13,6 +13,7 @@ import dev.thingscompanion.app.widget.ListWidget
 import dev.thingscompanion.app.data.writeWidgetSnapshot
 import dev.thingscompanion.cloud.DemoData
 import dev.thingscompanion.cloud.PendingChange
+import dev.thingscompanion.cloud.RepeatRule
 import dev.thingscompanion.cloud.TaskStatus
 import dev.thingscompanion.cloud.Schedule
 import dev.thingscompanion.cloud.TaskFilter
@@ -301,6 +302,12 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun deleteArea(id: String) = change(PendingChange.DeleteArea(newId(), id), done = R.string.area_deleted)
+
+    /** The to-do becomes the first occurrence of a new repeat (see [PendingChange.MakeRepeating]). */
+    fun makeRepeating(id: String, rule: RepeatRule) {
+        val checklist = _state.value.library?.checklist(id).orEmpty()
+        change(PendingChange.MakeRepeating(newId(), id, newId(), rule, checklist.map { newId() }), done = R.string.now_repeats)
+    }
 
     fun setProjectStatus(id: String, status: TaskStatus) = change(
         PendingChange.SetProjectStatus(newId(), id, status),
