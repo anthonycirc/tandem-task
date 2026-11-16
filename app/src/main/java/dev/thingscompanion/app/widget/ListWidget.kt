@@ -6,7 +6,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.datastore.preferences.core.Preferences
+import androidx.compose.runtime.remember
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
@@ -15,6 +17,8 @@ import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.action.actionParametersOf
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.lazy.LazyColumn
@@ -35,6 +39,8 @@ import androidx.glance.layout.padding
 import androidx.glance.layout.width
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.text.FontWeight
+import androidx.glance.semantics.contentDescription
+import androidx.glance.semantics.semantics
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import dev.thingscompanion.app.MainActivity
@@ -49,10 +55,11 @@ class ListWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         provideContent {
             GlanceTheme {
-                // Read on every redraw: a Glance session outlives update() calls, so reading once
-                // before provideContent kept showing the lists of the first draw.
-                val snapshot = readWidgetSnapshot(context)
+                // A running Glance session does not recompose on update() alone: refreshAll bumps
+                // SNAPSHOT_VERSION in the widget's state, which recomposes and re-reads the lists.
                 val prefs = currentState<Preferences>()
+                val version = prefs[SNAPSHOT_VERSION] ?: 0L
+                val snapshot = remember(version) { readWidgetSnapshot(context) }
                 val listKey = prefs[LIST_KEY] ?: DEFAULT_LIST
                 val theme = prefs[THEME_KEY]?.let { runCatching { WidgetTheme.valueOf(it) }.getOrNull() } ?: WidgetTheme.SYSTEM
                 Content(context, snapshot, listKey, WidgetColors(theme, prefs[OPACITY_KEY] ?: DEFAULT_OPACITY))
@@ -87,19 +94,33 @@ class ListWidget : GlanceAppWidget() {
                 snapshot == null -> Message(context.getString(R.string.widget_open_app), colors)
                 items.isEmpty() -> Message(context.getString(R.string.nothing_here), colors)
                 else -> LazyColumn {
-                    items(items, itemId = { it.id.hashCode().toLong() }) { item ->
-                        Text(
-                            text = "○  ${item.title}",
-                            maxLines = 2,
-                            style = TextStyle(fontSize = 14.sp, color = colors.text),
-                            modifier = GlanceModifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp)
-                                .clickable(actionStartActivity(openApp(context, taskId = item.id))),
-                        )
-                    }
+                    items(items, itemId = { it.id.hashCode().toLong() }) { item -> TaskRow(context, item, colors) }
                 }
             }
+        }
+    }
+
+    /** The circle checks the to-do (or opens it when the app cannot check it); the title opens it. */
+    @Composable
+    private fun TaskRow(context: Context, item: WidgetSnapshot.Item, colors: WidgetColors) {
+        val open = actionStartActivity(openApp(context, taskId = item.id))
+        val check = if (item.canToggle) actionRunCallback<CheckTaskAction>(actionParametersOf(CheckTaskAction.TASK_ID to item.id)) else open
+        val description = context.getString(R.string.widget_check, item.title)
+        Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "○",
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.secondary),
+                modifier = GlanceModifier
+                    .padding(start = 2.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)
+                    .semantics { contentDescription = description }
+                    .clickable(check),
+            )
+            Text(
+                text = item.title,
+                maxLines = 2,
+                style = TextStyle(fontSize = 14.sp, color = colors.text),
+                modifier = GlanceModifier.defaultWeight().padding(vertical = 6.dp).clickable(open),
+            )
         }
     }
 
@@ -116,6 +137,7 @@ class ListWidget : GlanceAppWidget() {
         val LIST_KEY = stringPreferencesKey("list_key")
         val THEME_KEY = stringPreferencesKey("theme")
         val OPACITY_KEY = intPreferencesKey("opacity")
+        private val SNAPSHOT_VERSION = longPreferencesKey("snapshot_version")
         const val DEFAULT_LIST = "today"
         const val DEFAULT_OPACITY = 100
 
@@ -129,7 +151,13 @@ class ListWidget : GlanceAppWidget() {
             }
 
         /** Redraws every placed widget from the latest snapshot. */
-        suspend fun refreshAll(context: Context) = ListWidget().updateAll(context)
+        suspend fun refreshAll(context: Context) {
+            val version = System.nanoTime()
+            GlanceAppWidgetManager(context).getGlanceIds(ListWidget::class.java).forEach { glanceId ->
+                updateAppWidgetState(context, glanceId) { it[SNAPSHOT_VERSION] = version }
+            }
+            ListWidget().updateAll(context)
+        }
 
         data class Settings(val listKey: String, val theme: WidgetTheme, val opacity: Int)
 

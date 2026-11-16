@@ -68,13 +68,79 @@ sealed interface PendingChange {
         val notes: String,
         val schedule: When,
         val reminderSecond: Int? = null,
+        /** Where it is filed, when added from a project, heading or area; at most one. */
+        val projectId: String? = null,
+        val headingId: String? = null,
+        val areaId: String? = null,
     ) : PendingChange {
         val reminder: LocalTime? get() = reminderSecond?.let { LocalTime.ofSecondOfDay(it.toLong()) }
 
         override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
             if (library.task(taskId) != null) return null
             val schedule = schedule.toSchedule()
-            return mapOf(taskId to InboxTask.payload(title, notes, library.nextTopIndex(schedule.start), now, schedule, reminder))
+            val heading = headingId?.let { library.task(it) ?: throw NoSuchElementException("The heading no longer exists.") }
+            val project = (projectId ?: heading?.projectId)?.let { library.task(it) ?: throw NoSuchElementException("The project no longer exists.") }
+            val index = when {
+                project != null -> library.nextIndexInProject(project.id)
+                areaId != null -> library.nextIndexInArea(areaId)
+                else -> library.nextTopIndex(schedule.start)
+            }
+            // Under a heading, Things files the to-do by its heading only (agr, empty pr).
+            val payload = InboxTask.payload(
+                title, notes, index, now, schedule, reminder,
+                projectId = projectId.takeIf { headingId == null }, areaId = areaId, headingId = headingId,
+            )
+            return mapOf(taskId to payload)
+        }
+    }
+
+    @Serializable
+    @SerialName("project_add")
+    data class AddProject(
+        override val opId: String,
+        val projectId: String,
+        val title: String,
+        val notes: String,
+        val schedule: When,
+        val areaId: String? = null,
+    ) : PendingChange {
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            if (library.task(projectId) != null) return null
+            areaId?.let { library.area(it) ?: throw NoSuchElementException("The area no longer exists.") }
+            val schedule = schedule.toSchedule().takeIf { it != Schedule.Inbox } ?: Schedule.Anytime
+            return mapOf(projectId to InboxTask.payload(title, notes, library.nextProjectIndex(areaId), now, schedule, type = 1, areaId = areaId))
+        }
+    }
+
+    @Serializable
+    @SerialName("heading_add")
+    data class AddHeading(override val opId: String, val headingId: String, val projectId: String, val title: String) : PendingChange {
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            if (library.task(headingId) != null) return null
+            val project = library.task(projectId) ?: throw NoSuchElementException("The project no longer exists.")
+            require(library.canEditProject(project)) { "Headings can only be added to a project." }
+            val index = library.nextIndexInProject(projectId)
+            return mapOf(headingId to InboxTask.payload(title, "", index, now, Schedule.Anytime, type = 2, projectId = projectId))
+        }
+    }
+
+    @Serializable
+    @SerialName("area_add")
+    data class AddArea(override val opId: String, val areaId: String, val title: String) : PendingChange {
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            if (library.area(areaId) != null) return null
+            return mapOf(areaId to TaskEdits.newArea(title, library.nextAreaIndex()))
+        }
+    }
+
+    @Serializable
+    @SerialName("area_rename")
+    data class RenameArea(override val opId: String, val areaId: String, val title: String) : PendingChange {
+        override val replaces get() = "area:$areaId"
+
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            val area = library.area(areaId) ?: throw NoSuchElementException("The area no longer exists.")
+            return TaskEdits.renameArea(area, title, now)?.let { mapOf(areaId to it) }
         }
     }
 
@@ -107,6 +173,120 @@ sealed interface PendingChange {
             if ((task.status == TaskStatus.COMPLETED) == done) return null
             require(library.canComplete(task)) { "This to-do can't be checked from the app." }
             return mapOf(taskId to TaskEdits.complete(task, done, now))
+        }
+    }
+
+    /** A project completed, cancelled or reopened; closing it closes its open to-dos and headings too. */
+    @Serializable
+    @SerialName("project_status")
+    data class SetProjectStatus(override val opId: String, val projectId: String, val status: TaskStatus) : PendingChange {
+        override val replaces get() = "done:$projectId"
+
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            val project = library.task(projectId) ?: throw NoSuchElementException("The project no longer exists.")
+            require(library.canEditProject(project)) { "This project can't be changed from the app." }
+            if (project.status == status) return null
+            val closing = if (status == TaskStatus.OPEN) emptyList() else library.openChildren(project)
+            return (listOf(project) + closing).associate { it.id to TaskEdits.setStatus(it, status, now) }
+        }
+    }
+
+    @Serializable
+    @SerialName("deadline")
+    data class SetDeadline(override val opId: String, val taskId: String, val day: Long?) : PendingChange {
+        override val replaces get() = "deadline:$taskId"
+
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            val task = library.task(taskId) ?: throw NoSuchElementException("The to-do no longer exists.")
+            require(library.canSetDeadline(task)) { "This deadline can't be changed from the app." }
+            return TaskEdits.setDeadline(task, day?.let(LocalDate::ofEpochDay), now)?.let { mapOf(taskId to it) }
+        }
+    }
+
+    /** Where a to-do goes: a project, a heading, an area, the Inbox, or (all null) out of any container. */
+    @Serializable
+    data class Destination(
+        val projectId: String? = null,
+        val headingId: String? = null,
+        val areaId: String? = null,
+        val inbox: Boolean = false,
+    )
+
+    /** Files a to-do elsewhere, as things3-cloud's `edit --move` (and Things, for headings) writes it. */
+    @Serializable
+    @SerialName("move")
+    data class MoveTask(override val opId: String, val taskId: String, val to: Destination) : PendingChange {
+        override val replaces get() = "move:$taskId"
+
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            val task = library.task(taskId) ?: throw NoSuchElementException("The to-do no longer exists.")
+            require(library.canMove(task)) { "This to-do can't be moved from the app." }
+            to.headingId?.let { require(library.task(it)?.type == TaskType.HEADING) { "The heading no longer exists." } }
+            to.projectId?.let { require(library.task(it)?.type == TaskType.PROJECT) { "The project no longer exists." } }
+            to.areaId?.let { library.area(it) ?: throw NoSuchElementException("The area no longer exists.") }
+            return TaskEdits.move(task, to, now)?.let { mapOf(taskId to it) }
+        }
+    }
+
+    @Serializable
+    @SerialName("project_move")
+    data class MoveProject(override val opId: String, val projectId: String, val areaId: String?) : PendingChange {
+        override val replaces get() = "move:$projectId"
+
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            val project = library.task(projectId) ?: throw NoSuchElementException("The project no longer exists.")
+            require(library.canEditProject(project)) { "This project can't be moved from the app." }
+            areaId?.let { library.area(it) ?: throw NoSuchElementException("The area no longer exists.") }
+            return TaskEdits.moveProject(project, areaId, now)?.let { mapOf(projectId to it) }
+        }
+    }
+
+    /**
+     * A list's order after a drag: [order] is the ids as the list should read, with [taskId] where
+     * it was dropped (in Today, the ids of the section it was dropped in). The index (`ix`, or `ti` in Today) is computed when sending, halfway between
+     * the neighbours, renumbering the list in the same commit when they leave no room. In Today,
+     * [evening] says which section it was dropped in.
+     */
+    @Serializable
+    @SerialName("reorder")
+    data class Reorder(
+        override val opId: String,
+        val taskId: String,
+        val order: List<String>,
+        val listKey: String,
+        val todayOrder: Boolean = false,
+        val evening: Boolean? = null,
+    ) : PendingChange {
+        // Per to-do: a later drag of the same one replaces this; drags of others in the list stay.
+        override val replaces get() = "order:$taskId"
+
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            val task = library.task(taskId) ?: throw NoSuchElementException("The to-do no longer exists.")
+            require(library.canReorder(task)) { "This can't be reordered from the app." }
+            val siblings = order.mapNotNull(library::task).filter(library::canReorder)
+            val indexes = TaskEdits.placeIndexes(siblings, task, if (todayOrder) Task::todayIndex else Task::index)
+            val key = if (todayOrder) "ti" else "ix"
+            val sections = if (todayOrder && evening != null && evening != task.evening) mapOf(taskId to evening) else emptyMap()
+            val ids = indexes.keys + sections.keys
+            if (ids.isEmpty()) return null
+            return ids.associateWith { id ->
+                val target = library.task(id)!!
+                TaskEdits.reorder(target, indexes[id]?.let { key to it }, sections[id], now)
+            }
+        }
+    }
+
+    /**
+     * Deletes an area (`t:2`, as things3-cloud does), first moving its projects and own to-dos to
+     * the Trash in the same item, so nothing is left filed in an area that is gone.
+     */
+    @Serializable
+    @SerialName("area_delete")
+    data class DeleteArea(override val opId: String, val areaId: String) : PendingChange {
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            val area = library.area(areaId) ?: return null
+            val trashed = library.areaContents(areaId).associate { it.id to TaskEdits.setTrashed(it, true, now) }
+            return trashed + (areaId to TaskEdits.delete(area.entity))
         }
     }
 
@@ -203,21 +383,37 @@ object PendingChanges {
      * The to-dos as they will be once [changes] reach Things: each change applied in order on a
      * copy of [state]. A change that can't apply is left out here; sending it reports why.
      */
-    fun overlay(state: HistoryState, changes: List<PendingChange>, now: Double): ThingsLibrary {
-        if (changes.isEmpty()) return ThingsLibrary.from(state)
-        val copy = HistoryState(state.objects)
-        var library = ThingsLibrary.from(copy)
-        for (change in changes) {
-            val payload = try {
-                change.build(library, now)
-            } catch (e: IllegalArgumentException) {
-                null
-            } catch (e: NoSuchElementException) {
-                null
-            } ?: continue
-            copy.apply(WireParser.parseItem(JsonObject(payload)))
-            library = ThingsLibrary.from(copy)
-        }
-        return library
+    fun overlay(state: HistoryState, changes: List<PendingChange>, now: Double): ThingsLibrary = overlayState(state, changes, now).library
+
+    /** [overlay], also returning the state it built, so a later change can be applied alone with [applyOne]. */
+    fun overlayState(state: HistoryState, changes: List<PendingChange>, now: Double): Shown {
+        var shown = Shown(HistoryState(state.objects), ThingsLibrary.from(state))
+        for (change in changes) shown = applyOne(shown, change, now)
+        return shown
     }
+
+    /**
+     * Whether [latest] can be applied alone on what [previous] showed: only when the queue just
+     * grew by it. When it also dropped a superseded change, the changes after that one were
+     * judged against a state that no longer holds, so the whole queue must be replayed.
+     */
+    fun canApplyAlone(previous: List<PendingChange>, pending: List<PendingChange>, latest: PendingChange?): Boolean =
+        latest != null && pending == previous + latest
+
+    /** [shown] with one more change: a copy of its state, one rebuild of the lists. */
+    fun applyOne(shown: Shown, change: PendingChange, now: Double): Shown {
+        val payload = try {
+            change.build(shown.library, now)
+        } catch (e: IllegalArgumentException) {
+            null
+        } catch (e: NoSuchElementException) {
+            null
+        } ?: return shown
+        val copy = HistoryState(shown.state.objects)
+        copy.apply(WireParser.parseItem(JsonObject(payload)))
+        return Shown(copy, ThingsLibrary.from(copy))
+    }
+
+    /** A state with queued changes applied, and the lists built from it; never mutated. */
+    class Shown(val state: HistoryState, val library: ThingsLibrary)
 }

@@ -11,6 +11,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -119,6 +120,76 @@ class PendingChangeTest {
     }
 
     @Test
+    fun `applying a new change alone gives the same lists as replaying the whole queue`() {
+        val first = PendingChange.SetDone("op1", "plain", true)
+        val second = PendingChange.SetChecklistItemDone("op2", "c1", true)
+        val base = state()
+
+        val stepwise = PendingChanges.applyOne(PendingChanges.overlayState(base, listOf(first), now), second, now)
+        val replayed = PendingChanges.overlayState(base, listOf(first, second), now)
+
+        assertEquals(replayed.state.objects, stepwise.state.objects)
+        assertEquals(false, stepwise.library.task("plain")!!.isOpen)
+        assertEquals(true, stepwise.library.checklistItem("c1")!!.done)
+        // The base it started from is untouched.
+        assertEquals(true, ThingsLibrary.from(base).task("plain")!!.isOpen)
+    }
+
+    @Test
+    fun `a change may be applied alone only when the queue just grew by it`() {
+        val restore = PendingChange.SetTrashed("op1", "binned", false)
+        val check = PendingChange.SetDone("op2", "binned", true)
+        val trash = PendingChange.SetTrashed("op3", "binned", true)
+
+        assertTrue(PendingChanges.canApplyAlone(listOf(restore), listOf(restore, check), check))
+        // Trash replaces the queued restore: the check was judged against a restored to-do, so replay.
+        val queue = PendingChanges.enqueue(listOf(restore, check), trash)
+        assertEquals(listOf(check, trash), queue)
+        assertFalse(PendingChanges.canApplyAlone(listOf(restore, check), queue, trash))
+        assertFalse(PendingChanges.canApplyAlone(listOf(restore), listOf(restore), null))
+    }
+
+    /** Taps as the app makes them: the queue rule, then one change alone when allowed, else a replay. */
+    private fun tapByTap(changes: List<PendingChange>): Pair<List<PendingChange>, PendingChanges.Shown> {
+        var queue = emptyList<PendingChange>()
+        var shown = PendingChanges.overlayState(state(), queue, now)
+        for (change in changes) {
+            val next = PendingChanges.enqueue(queue, change)
+            shown = if (PendingChanges.canApplyAlone(queue, next, change)) PendingChanges.applyOne(shown, change, now)
+            else PendingChanges.overlayState(state(), next, now)
+            queue = next
+        }
+        return queue to shown
+    }
+
+    private fun visible(library: ThingsLibrary, id: String) =
+        library.task(id)?.let { Triple(it.status, it.trashed, library.checklist(id).map { item -> item.done }) }
+
+    @Test
+    fun `tap by tap, the lists match a replay of the queue, undo and redo included`() {
+        val sequences = listOf(
+            listOf(PendingChange.SetTrashed("1", "binned", false), PendingChange.SetDone("2", "binned", true), PendingChange.SetTrashed("3", "binned", true)),
+            listOf(
+                PendingChange.SetTrashed("1", "binned", false), PendingChange.SetDone("2", "binned", true),
+                PendingChange.SetTrashed("3", "binned", true), PendingChange.SetTrashed("4", "binned", false),
+            ),
+            listOf(
+                PendingChange.SetDone("1", "plain", true), PendingChange.SetTrashed("2", "plain", true),
+                PendingChange.SetDone("3", "plain", false), PendingChange.SetTrashed("4", "plain", false),
+            ),
+            listOf(PendingChange.SetTrashed("1", "plain", true), PendingChange.SetChecklistItemDone("2", "c1", true), PendingChange.SetTrashed("3", "plain", false)),
+        )
+        for (changes in sequences) {
+            val (queue, stepwise) = tapByTap(changes)
+            val replayed = PendingChanges.overlayState(state(), queue, now)
+            for (id in listOf("plain", "binned")) {
+                assertEquals(visible(replayed.library, id), visible(stepwise.library, id), "$id after ${changes.map { it.opId }}")
+            }
+            assertEquals(replayed.library.today(today).map { it.id }, stepwise.library.today(today).map { it.id })
+        }
+    }
+
+    @Test
     fun `the overlay shows pending changes at once and skips impossible ones`() {
         val changes = listOf(
             PendingChange.AddTask("o1", "new", "Buy milk", "", PendingChange.When.of(Schedule.Inbox), null),
@@ -140,7 +211,7 @@ class PendingChangeTest {
     }
 
     @Test
-    fun `the trash lists trashed to-dos, most recently changed first`() {
+    fun `the trash lists trashed to-dos and projects, most recently changed first`() {
         val lib = library(
             """{"a": {"t": 0, "e": "Task7", "p": {"tt": "A", "tr": true, "md": 10.0}},
                 "b": {"t": 0, "e": "Task7", "p": {"tt": "B", "tr": true, "md": 20.0, "ss": 3}},
@@ -148,7 +219,8 @@ class PendingChangeTest {
                 "old": {"t": 0, "e": "Task4", "p": {"tt": "Legacy", "tr": true}},
                 "live": {"t": 0, "e": "Task7", "p": {"tt": "Live"}}}""",
         )
-        assertEquals(listOf("b", "a"), lib.trash().map { it.id })
+        // Projects can be trashed from the app, so they are listed to be restored.
+        assertEquals(listOf("p", "b", "a"), lib.trash().map { it.id })
         assertTrue(lib.canRestore(lib.task("a")!!))
         assertTrue(lib.canTrash(lib.task("live")!!))
         assertTrue(!lib.canTrash(lib.task("a")!!))

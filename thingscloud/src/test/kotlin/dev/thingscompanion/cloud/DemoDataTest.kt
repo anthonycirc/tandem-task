@@ -2,6 +2,7 @@ package dev.thingscompanion.cloud
 
 import java.time.LocalDate
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class DemoDataTest {
@@ -26,5 +27,12 @@ class DemoDataTest {
         assertTrue(library.today(today, closedOn = today, zone = java.time.ZoneOffset.UTC).any { !it.isOpen })
         assertTrue(library.checklist(library.today(today).first { library.checklist(it.id).isNotEmpty() }.id).size >= 3)
         assertTrue(library.today(today).any { library.repeatRule(it) != null })
+    }
+
+    @Test
+    fun `the website project shows its to-dos under headings`() {
+        val lib = ThingsLibrary.from(DemoData.state(today, nowSeconds = 1_794_740_000.0))
+        val sections = lib.projectSections("p-site").map { it.heading?.title to it.tasks.map(Task::id) }
+        assertEquals(listOf("Content" to listOf("t-1"), "Launch" to listOf("u-3", "a-2")), sections)
     }
 }

@@ -44,9 +44,11 @@ object ListColors {
     val evening = Color(0xFF6E8FD8)
     val deadline = Color(0xFFE5484D)
     val checked = Color(0xFF3D8BF2)
+    val heading = Color(0xFF3D8BF2)
+    val area = Color(0xFF3FA99A)
 }
 
-enum class ListKind { INBOX, TODAY, UPCOMING, ANYTIME, SOMEDAY, PROJECT, TRASH, EVENING }
+enum class ListKind { INBOX, TODAY, UPCOMING, ANYTIME, SOMEDAY, PROJECT, AREA, TRASH, EVENING }
 
 /** The icon of a list, drawn in its colour. */
 @Composable
@@ -88,6 +90,25 @@ fun ListIcon(kind: ListKind, modifier: Modifier = Modifier, size: Dp = 22.dp) {
                     drawLine(c, Offset(w * 0.4f, w * 0.56f), Offset(w * 0.6f, w * 0.56f), strokeWidth = w * 0.09f, cap = StrokeCap.Round)
                 }
                 ListKind.PROJECT -> drawCircle(ListColors.project, radius = w * 0.36f, style = stroke)
+                ListKind.AREA -> {
+                    // A cube, as Things marks areas.
+                    val c = ListColors.area
+                    val cube = Path().apply {
+                        moveTo(w * 0.5f, w * 0.1f)
+                        lineTo(w * 0.86f, w * 0.3f)
+                        lineTo(w * 0.86f, w * 0.7f)
+                        lineTo(w * 0.5f, w * 0.9f)
+                        lineTo(w * 0.14f, w * 0.7f)
+                        lineTo(w * 0.14f, w * 0.3f)
+                        close()
+                        moveTo(w * 0.14f, w * 0.3f)
+                        lineTo(w * 0.5f, w * 0.5f)
+                        lineTo(w * 0.86f, w * 0.3f)
+                        moveTo(w * 0.5f, w * 0.5f)
+                        lineTo(w * 0.5f, w * 0.9f)
+                    }
+                    drawPath(cube, c, style = stroke)
+                }
                 ListKind.EVENING -> {
                     // A crescent moon.
                     val moon = Path().apply {

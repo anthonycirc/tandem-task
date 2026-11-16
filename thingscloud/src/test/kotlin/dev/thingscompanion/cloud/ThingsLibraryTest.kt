@@ -126,6 +126,58 @@ class ThingsLibraryTest {
     }
 
     @Test
+    fun `a project's to-dos come first without heading, then under each heading in order, as in Things`() {
+        val lib = library(
+            "proj" to task(""""tt": "Move", "tp": 1, "st": 1"""),
+            "late" to task(""""tt": "Unpack", "tp": 2, "pr": ["proj"], "ix": 20"""),
+            "early" to task(""""tt": "Boxes", "tp": 2, "pr": ["proj"], "ix": 10"""),
+            "empty" to task(""""tt": "Later", "tp": 2, "pr": ["proj"], "ix": 30"""),
+            "archived" to task(""""tt": "Done part", "tp": 2, "pr": ["proj"], "ix": 5, "ss": 3"""),
+            "a" to task(""""tt": "Buy tape", "st": 1, "agr": ["early"], "ix": 2"""),
+            "b" to task(""""tt": "Find boxes", "st": 1, "agr": ["early"], "ix": 1"""),
+            "c" to task(""""tt": "Open boxes", "st": 1, "agr": ["late"], "ix": 0"""),
+            "loose" to task(""""tt": "Call movers", "st": 1, "pr": ["proj"], "ix": 99"""),
+        )
+
+        val sections = lib.projectSections("proj").map { it.heading?.id to it.tasks.ids() }
+
+        assertEquals(
+            listOf(null to listOf("loose"), "early" to listOf("b", "a"), "late" to listOf("c"), "empty" to emptyList()),
+            sections,
+        )
+    }
+
+    @Test
+    fun `a project without headings is one section, the same to-dos as before`() {
+        val lib = library(
+            "proj" to task(""""tt": "Move", "tp": 1, "st": 1"""),
+            "x" to task(""""tt": "Pack", "st": 1, "pr": ["proj"], "ix": 2"""),
+            "y" to task(""""tt": "Label", "st": 1, "pr": ["proj"], "ix": 1"""),
+        )
+
+        assertEquals(listOf(null to listOf("y", "x")), lib.projectSections("proj").map { it.heading?.id to it.tasks.ids() })
+        assertEquals(listOf("y", "x"), lib.projectTasks("proj").ids())
+    }
+
+    @Test
+    fun `an area shows its projects, then its own to-dos outside any project`() {
+        val lib = library(
+            "home" to """{"t": 0, "e": "Area3", "p": {"tt": "Home", "ix": 0}}""",
+            "work" to """{"t": 0, "e": "Area3", "p": {"tt": "Work", "ix": 1}}""",
+            "p2" to task(""""tt": "Garden", "tp": 1, "st": 1, "ar": ["home"], "ix": 2"""),
+            "p1" to task(""""tt": "Kitchen", "tp": 1, "st": 1, "ar": ["home"], "ix": 1"""),
+            "pw" to task(""""tt": "Launch", "tp": 1, "st": 1, "ar": ["work"]"""),
+            "inProject" to task(""""tt": "Paint", "st": 1, "pr": ["p1"]"""),
+            "own2" to task(""""tt": "Call mum", "st": 1, "ar": ["home"], "ix": 5"""),
+            "own1" to task(""""tt": "Water", "st": 1, "ar": ["home"], "ix": 3"""),
+            "elsewhere" to task(""""tt": "Report", "st": 1, "ar": ["work"]"""),
+        )
+
+        assertEquals(listOf("p1", "p2"), lib.areaProjects("home").ids())
+        assertEquals(listOf("own1", "own2"), lib.areaTasks("home").ids())
+    }
+
+    @Test
     fun `projects lists open untrashed projects with their area`() {
         val lib = library(
             "p1" to task(""""tt": "B project", "tp": 1, "st": 1, "ix": 2"""),

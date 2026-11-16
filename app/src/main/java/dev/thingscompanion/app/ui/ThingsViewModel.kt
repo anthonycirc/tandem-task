@@ -13,6 +13,7 @@ import dev.thingscompanion.app.widget.ListWidget
 import dev.thingscompanion.app.data.writeWidgetSnapshot
 import dev.thingscompanion.cloud.DemoData
 import dev.thingscompanion.cloud.PendingChange
+import dev.thingscompanion.cloud.TaskStatus
 import dev.thingscompanion.cloud.Schedule
 import dev.thingscompanion.cloud.TaskFilter
 import dev.thingscompanion.cloud.ThingsCloudException
@@ -27,8 +28,10 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.IOException
+import java.time.LocalDate
 import java.time.LocalTime
 
 /** A message for the snackbar, resolved against the app's (localized) resources. */
@@ -132,6 +135,20 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         syncRequests.trySend(Unit)
     }
 
+    private var sendJob: Job? = null
+
+    /**
+     * A tap only queues its change; sending (and the pull that follows) waits until taps stop for
+     * [SEND_DELAY_MS], so a burst of changes goes out in one sync, in the background.
+     */
+    private fun sendLater() {
+        sendJob?.cancel()
+        sendJob = viewModelScope.launch {
+            delay(SEND_DELAY_MS)
+            requestSync()
+        }
+    }
+
     private fun show(outcome: SyncOutcome) = _state.update { it.copy(library = outcome.library, pending = outcome.pending) }
 
     fun signIn(email: String, password: String) {
@@ -184,7 +201,7 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
                 show(repository.enqueue(change))
                 done?.let { res -> _state.update { it.copy(message = UiMessage(res, undo = undo)) } }
                 runCatching { ListWidget.refreshAll(getApplication()) }
-                requestSync()
+                sendLater()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -195,14 +212,24 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun newId() = ThingsIds.random()
 
-    fun addTask(title: String, notes: String, schedule: Schedule, reminder: LocalTime?, checklist: List<ChecklistDraft> = emptyList()) {
+    fun addTask(
+        title: String,
+        notes: String,
+        schedule: Schedule,
+        reminder: LocalTime?,
+        checklist: List<ChecklistDraft> = emptyList(),
+        deadline: LocalDate? = null,
+        projectId: String? = null,
+        areaId: String? = null,
+    ) {
         val taskId = newId()
         change(
-            PendingChange.AddTask(newId(), taskId, title, notes, PendingChange.When.of(schedule), reminder?.toSecondOfDay()),
+            PendingChange.AddTask(newId(), taskId, title, notes, PendingChange.When.of(schedule), reminder?.toSecondOfDay(), projectId = projectId, areaId = areaId),
             // Name the Inbox when that is where it went; elsewhere (Today, a date…) just confirm.
             done = if (schedule == Schedule.Inbox) R.string.added_to_inbox else R.string.added,
         )
         checklist.filter { it.title.isNotBlank() }.forEach { change(PendingChange.AddChecklistItem(newId(), it.id, taskId, it.title)) }
+        deadline?.let { change(PendingChange.SetDeadline(newId(), taskId, it.toEpochDay())) }
     }
 
     /** Saves the form: the to-do's fields, then the checklist rows added, renamed or removed. */
@@ -213,8 +240,11 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         schedule: Schedule,
         reminder: LocalTime?,
         checklist: List<ChecklistDraft>? = null,
+        deadline: LocalDate? = null,
     ) {
+        val task = _state.value.library?.task(id)
         change(PendingChange.EditTask(newId(), id, title, notes, PendingChange.When.of(schedule), reminder?.toSecondOfDay()), done = R.string.saved)
+        if (task != null && deadline != task.deadline) change(PendingChange.SetDeadline(newId(), id, deadline?.toEpochDay()))
         if (checklist == null) return
         val before = _state.value.library?.checklist(id).orEmpty().associateBy { it.id }
         val kept = checklist.filter { it.title.isNotBlank() }
@@ -227,6 +257,59 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+
+    fun addProject(title: String, notes: String, schedule: Schedule, deadline: LocalDate?, areaId: String?) {
+        val id = newId()
+        change(PendingChange.AddProject(newId(), id, title, notes, PendingChange.When.of(schedule), areaId), done = R.string.added)
+        deadline?.let { change(PendingChange.SetDeadline(newId(), id, it.toEpochDay())) }
+    }
+
+    fun addHeading(projectId: String, title: String) = change(PendingChange.AddHeading(newId(), newId(), projectId, title))
+
+    fun addArea(title: String) = change(PendingChange.AddArea(newId(), newId(), title), done = R.string.added)
+
+    fun renameArea(id: String, title: String) = change(PendingChange.RenameArea(newId(), id, title))
+
+    /** A heading keeps its place and status; only its title changes. */
+    fun renameHeading(id: String, title: String) {
+        val heading = _state.value.library?.task(id) ?: return
+        change(PendingChange.EditTask(newId(), id, title, heading.notes.orEmpty(), PendingChange.When.of(Schedule.of(heading, ThingsDay.today()))))
+    }
+
+    fun moveTask(id: String, to: PendingChange.Destination) = change(PendingChange.MoveTask(newId(), id, to), done = R.string.moved)
+
+    fun moveProject(id: String, areaId: String?) = change(PendingChange.MoveProject(newId(), id, areaId), done = R.string.moved)
+
+    /** A list's new order after a drag (see [PendingChange.Reorder]). */
+    fun reorder(id: String, order: List<String>, listKey: String, todayOrder: Boolean = false, evening: Boolean? = null) =
+        change(PendingChange.Reorder(newId(), id, order, listKey, todayOrder, evening))
+
+    /** Dropped in a project: filed under the section it landed in, then placed in its order. */
+    fun dropInProject(projectId: String, id: String, headingId: String?, order: List<String>) {
+        val task = _state.value.library?.task(id) ?: return
+        if (task.headingId != headingId) {
+            change(PendingChange.MoveTask(newId(), id, if (headingId != null) PendingChange.Destination(headingId = headingId) else PendingChange.Destination(projectId = projectId)))
+        }
+        reorder(id, order, "project:$projectId:${headingId.orEmpty()}")
+    }
+
+    /** A project dropped under an area (or none): moved there if needed, then placed in its order. */
+    fun dropProject(id: String, areaId: String?, order: List<String>) {
+        val project = _state.value.library?.task(id) ?: return
+        if (project.areaId != areaId) change(PendingChange.MoveProject(newId(), id, areaId))
+        reorder(id, order, "projects:${areaId.orEmpty()}")
+    }
+
+    fun deleteArea(id: String) = change(PendingChange.DeleteArea(newId(), id), done = R.string.area_deleted)
+
+    fun setProjectStatus(id: String, status: TaskStatus) = change(
+        PendingChange.SetProjectStatus(newId(), id, status),
+        done = when (status) {
+            TaskStatus.COMPLETED -> R.string.project_completed
+            TaskStatus.CANCELLED -> R.string.project_cancelled
+            TaskStatus.OPEN -> R.string.project_reopened
+        },
+    )
 
     fun setDone(id: String, done: Boolean) =
         change(PendingChange.SetDone(newId(), id, done), if (done) R.string.marked_done else R.string.marked_open)
@@ -242,6 +325,8 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setChecklistItemDone(itemId: String, done: Boolean) = change(PendingChange.SetChecklistItemDone(newId(), itemId, done))
+
+    fun deleteChecklistItem(itemId: String) = change(PendingChange.DeleteChecklistItem(newId(), itemId))
 
     fun addChecklistItem(taskId: String, title: String) {
         if (title.isNotBlank()) change(PendingChange.AddChecklistItem(newId(), newId(), taskId, title))
@@ -307,6 +392,8 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
     fun dismissMessage() = _state.update { it.copy(message = null) }
 
     private companion object {
+        const val SEND_DELAY_MS = 8_000L
+
         const val KEY_SHOW_CLOSED = "show_closed"
         const val KEY_THEME = "theme"
     }

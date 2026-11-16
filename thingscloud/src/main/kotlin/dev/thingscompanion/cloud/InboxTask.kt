@@ -115,20 +115,27 @@ object InboxTask {
         now: Double,
         schedule: Schedule = Schedule.Inbox,
         reminder: LocalTime? = null,
+        type: Int = 0,
+        projectId: String? = null,
+        areaId: String? = null,
+        headingId: String? = null,
     ): JsonObject {
         val trimmedTitle = title.trim()
         require(trimmedTitle.isNotEmpty()) { "The title is empty." }
         require(reminder == null || schedule.date != null) { "A reminder needs a date." }
         val trimmedNotes = notes.trim()
         val empty = JsonArray(emptyList())
+        fun ids(id: String?) = JsonArray(listOfNotNull(id).map(::JsonPrimitive))
+        // Filed in a project, heading or area, a to-do is never in the Inbox list.
+        val start = if (schedule.start == StartList.INBOX && (projectId ?: areaId ?: headingId) != null) StartList.ANYTIME else schedule.start
         val day = schedule.date?.let { JsonPrimitive(it.toEpochDay() * SECONDS_PER_DAY) } ?: JsonNull
         return buildJsonObject {
             put("t", 0)
             put("e", "Task7")
             put("p", buildJsonObject {
                 put("acrd", JsonNull)
-                put("agr", empty)
-                put("ar", empty)
+                put("agr", ids(headingId))
+                put("ar", ids(areaId))
                 put("ato", reminder?.let { JsonPrimitive(it.toSecondOfDay()) } ?: JsonNull)
                 put("cd", plainNumber(now))
                 put("dd", JsonNull)
@@ -143,7 +150,7 @@ object InboxTask {
                 put("lt", false)
                 put("md", plainNumber(now))
                 put("nt", notesJson(trimmedNotes))
-                put("pr", empty)
+                put("pr", ids(projectId))
                 put("rmd", JsonNull)
                 put("rp", JsonNull)
                 put("rr", JsonNull)
@@ -152,11 +159,11 @@ object InboxTask {
                 put("sp", JsonNull)
                 put("sr", day)
                 put("ss", 0)
-                put("st", startCode(schedule.start))
+                put("st", startCode(start))
                 put("tg", empty)
                 put("ti", 0)
                 put("tir", day)
-                put("tp", 0)
+                put("tp", type)
                 put("tr", false)
                 put("tt", trimmedTitle)
                 put("xx", buildJsonObject {

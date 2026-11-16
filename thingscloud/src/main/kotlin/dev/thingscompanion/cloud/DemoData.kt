@@ -75,11 +75,16 @@ object DemoData {
         todo("p-kitchen", "Kitchen renovation", Schedule.Anytime, 1, area = "area-home", type = 1)
         todo("p-lisbon", "Weekend in Lisbon", Schedule.Anytime, 2, area = "area-home", type = 1)
         todo("p-novel", "Write a short story", Schedule.Someday, 3, area = "area-home", type = 1)
+        // Headings of the website project; Things files their to-dos under the heading only (agr, no pr).
+        todo("h-content", "Content", Schedule.Anytime, 20, project = "p-site", type = 2)
+        todo("h-launch", "Launch", Schedule.Anytime, 30, project = "p-site", type = 2)
+        val underContent = mapOf("agr" to JsonArray(listOf(JsonPrimitive("h-content"))))
+        val underLaunch = mapOf("agr" to JsonArray(listOf(JsonPrimitive("h-launch"))))
 
         // Today
         todo(
-            "t-1", "Review the homepage copy", Schedule.Today(today), 0, project = "p-site", tags = listOf("tag-deep"),
-            notes = "Tighten the hero headline.\nCheck the pricing table on mobile.",
+            "t-1", "Review the homepage copy", Schedule.Today(today), 0, tags = listOf("tag-deep"), extra = underContent,
+            notes = "Tighten the **hero headline**.\n- Check the pricing table on *mobile*\n- Compare with https://example.com",
         )
         todo("t-2", "Call the plumber about the sink", Schedule.Today(today), 1, project = "p-kitchen", tags = listOf("tag-call"), reminder = LocalTime.of(10, 30))
         todo("t-3", "Book the flight to Lisbon", Schedule.Today(today), 2, project = "p-lisbon", deadline = day(3))
@@ -106,12 +111,12 @@ object DemoData {
         // Upcoming
         todo("u-1", "Dentist appointment", Schedule.OnDate(day(1)), 0, area = "area-home", reminder = LocalTime.of(8, 45))
         todo("u-2", "Pay the tiles deposit", Schedule.OnDate(day(2)), 1, project = "p-kitchen", deadline = day(5))
-        todo("u-3", "Ship the website", Schedule.OnDate(day(4)), 2, project = "p-site", tags = listOf("tag-deep"))
+        todo("u-3", "Ship the website", Schedule.OnDate(day(4)), 2, tags = listOf("tag-deep"), extra = underLaunch)
         todo("u-4", "Check in online", Schedule.OnDate(day(6)), 3, project = "p-lisbon")
 
         // Anytime
         todo("a-1", "Choose the cabinet handles", Schedule.Anytime, 10, project = "p-kitchen")
-        todo("a-2", "Write the launch announcement", Schedule.Anytime, 11, project = "p-site")
+        todo("a-2", "Write the launch announcement", Schedule.Anytime, 11, extra = underLaunch)
         todo("a-3", "Find a pastel de nata bakery", Schedule.Anytime, 12, project = "p-lisbon")
         todo("a-4", "Order new running shoes", Schedule.Anytime, 13, area = "area-home", tags = listOf("tag-errand"))
 

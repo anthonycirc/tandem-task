@@ -38,6 +38,53 @@ class WidgetSnapshotTest {
     }
 
     @Test
+    fun `checked to-dos are not in the snapshot`() {
+        val lib = library(
+            """{"open": {"t": 0, "e": "Task7", "p": {"tt": "Open", "st": 1, "sr": $day15}},
+                "done": {"t": 0, "e": "Task7", "p": {"tt": "Done", "st": 1, "sr": $day15, "ss": 3, "sp": ${day15 + 43_200}}}}"""
+        )
+
+        assertEquals(listOf("open"), WidgetSnapshot.from(lib, today, updatedAtMillis = 42).items("today").map { it.id })
+    }
+
+    @Test
+    fun `a to-do checked from the widget leaves every list at once`() {
+        val lib = library(
+            """{"p1": {"t": 0, "e": "Task7", "p": {"tt": "Move", "tp": 1, "st": 1}},
+                "a": {"t": 0, "e": "Task7", "p": {"tt": "A", "st": 1, "sr": $day15, "pr": ["p1"]}},
+                "b": {"t": 0, "e": "Task7", "p": {"tt": "B", "st": 1, "sr": $day15}}}"""
+        )
+
+        val shown = WidgetSnapshot.from(lib, today, updatedAtMillis = 42).without("a")
+
+        assertEquals(listOf("b"), shown.items("today").map { it.id })
+        assertEquals(emptyList(), shown.items("project:p1"))
+        assertEquals(listOf("p1"), shown.projects.map { it.id })
+    }
+
+    @Test
+    fun `to-dos the app cannot check are marked so the widget opens them instead`() {
+        val lib = library(
+            """{"tmpl": {"t": 0, "e": "Task7", "p": {"tt": "Water", "st": 1, "rr": {"tp": 1, "fu": 16, "fa": 2}}},
+                "inst": {"t": 0, "e": "Task7", "p": {"tt": "Water", "st": 1, "sr": $day15, "rt": ["tmpl"]}},
+                "plain": {"t": 0, "e": "Task7", "p": {"tt": "Call", "st": 1, "sr": $day15}}}"""
+        )
+
+        val items = WidgetSnapshot.from(lib, today, updatedAtMillis = 42).items("today").associate { it.id to it.canToggle }
+
+        assertEquals(mapOf("inst" to false, "plain" to true), items)
+    }
+
+    @Test
+    fun `a snapshot written before check-off support or after it, still reads, as checkable`() {
+        val old = """{"updatedAtMillis": 1, "lists": {"today": [{"id": "a", "title": "A", "done": false}]}, "projects": []}"""
+
+        val item = WidgetSnapshot.fromJson(old).items("today").single()
+
+        assertEquals(true, item.canToggle)
+    }
+
+    @Test
     fun `snapshot survives a json round trip`() {
         val lib = library("""{"i1": {"t": 0, "e": "Task7", "p": {"tt": "Inbox \"quoted\"", "st": 0}}}""")
         val snapshot = WidgetSnapshot.from(lib, today, updatedAtMillis = 42)

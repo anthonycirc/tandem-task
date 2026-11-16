@@ -2,6 +2,32 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-11-16
+
+### Added
+
+- **Check off from the widget.** Tap a to-do's circle in the widget: it leaves the widget at once and the change is sent in the background.
+- **Headings.** A project shows its to-dos under their headings, as in Things.
+- **Areas.** The Projects list shows every area; an area opens on its projects and its own to-dos.
+- **Delete checklist items** from the to-do detail.
+- **Projects and areas.** Create projects (with When and deadline), headings and areas; rename areas and headings; complete, cancel or reopen a project (its open to-dos follow, as in Things); move a project to another area.
+- **Delete projects and areas.** A project goes to the Trash (with Undo) and can be restored; its to-dos leave the lists with it. Deleting an area first moves its projects and to-dos to the Trash, after a confirmation.
+- **Swipe to delete** projects and headings (to the Trash, with Undo; a heading takes its to-dos with it) and areas (after a confirmation).
+- **Areas tab** listing every area.
+- **Deadlines** on to-dos and projects, in the forms.
+- **Move** a to-do to the Inbox, a project, a heading or an area.
+- **Drag to reorder.** Long-press a to-do, a heading or a project and drag it: in Today (also into This Evening), the Inbox, Anytime, Someday, a project (also under another heading), an area, and Projects (also into another area). Off in Upcoming and while a filter is on.
+- **+ in context.** In a project: new to-do or heading. In an area: new to-do or project. In Projects: new project or area.
+- **Markdown in notes.** Bold, italic, strikethrough, code, headings, lists and links are styled in the to-do detail and while you type; links open in the browser.
+
+### Changed
+
+- **Taps never wait for Things Cloud.** A change is applied on the phone at once and sent in the background a few seconds after the last tap (or when you leave the app), together with the others. The history stays in memory, so a tap no longer re-reads it.
+
+### Fixed
+
+- The widget did not redraw after a change.
+
 ## [0.2.0] - 2026-11-16
 
 ### Added
@@ -37,5 +63,6 @@ First public release.
 - Background sync every 30 minutes.
 - Light, dark or system theme. English and French.
 
+[0.3.0]: https://github.com/anthonycirc/tandem-task/releases/tag/v0.3.0
 [0.2.0]: https://github.com/anthonycirc/tandem-task/releases/tag/v0.2.0
 [0.1.0]: https://github.com/anthonycirc/tandem-task/releases/tag/v0.1.0

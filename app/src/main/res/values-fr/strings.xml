@@ -120,4 +120,45 @@
     <string name="repeat_month_day_pattern">d MMMM</string>
     <string name="repeat_after_completion">%1$s, après achèvement</string>
     <string name="repeat_until">%1$s, jusqu\'au %2$s</string>
+    <string name="widget_check">Cocher « %1$s »</string>
+    <string name="deadline">Échéance</string>
+    <string name="add_deadline">Ajouter une échéance</string>
+    <string name="no_deadline">Sans échéance</string>
+    <string name="edit_project_title">Modifier le projet</string>
+    <string name="complete_project">Terminer le projet</string>
+    <string name="cancel_project">Annuler le projet</string>
+    <string name="reopen_project">Rouvrir le projet</string>
+    <string name="more">Plus</string>
+    <string name="project_completed">Projet terminé</string>
+    <string name="project_cancelled">Projet annulé</string>
+    <string name="project_reopened">Projet rouvert</string>
+    <plurals name="complete_project_todos">
+        <item quantity="one">Sa tâche ouverte sera aussi terminée.</item>
+        <item quantity="many">Ses %1$d tâches ouvertes seront aussi terminées.</item>
+        <item quantity="other">Ses %1$d tâches ouvertes seront aussi terminées.</item>
+    </plurals>
+    <plurals name="cancel_project_todos">
+        <item quantity="one">Sa tâche ouverte sera aussi annulée.</item>
+        <item quantity="many">Ses %1$d tâches ouvertes seront aussi annulées.</item>
+        <item quantity="other">Ses %1$d tâches ouvertes seront aussi annulées.</item>
+    </plurals>
+    <string name="new_project_title">Nouveau projet</string>
+    <string name="new_heading_title">Nouvel en-tête</string>
+    <string name="new_area_title">Nouvelle zone</string>
+    <string name="rename_area">Renommer la zone</string>
+    <string name="rename_heading">Renommer l\'en-tête</string>
+    <string name="move">Déplacer</string>
+    <string name="move_to_area">Déplacer vers une zone</string>
+    <string name="no_area">Aucune zone</string>
+    <string name="moved">Déplacé</string>
+    <string name="delete_project">Supprimer le projet</string>
+    <string name="delete_area">Supprimer la zone</string>
+    <string name="delete_area_title">Supprimer « %1$s » ?</string>
+    <string name="area_deleted">Zone supprimée</string>
+    <plurals name="delete_area_contents">
+        <item quantity="one">Son projet ou sa tâche va dans la corbeille. La zone elle-même ne pourra pas être restaurée.</item>
+        <item quantity="many">Ses %1$d projets et tâches vont dans la corbeille. La zone elle-même ne pourra pas être restaurée.</item>
+        <item quantity="other">Ses %1$d projets et tâches vont dans la corbeille. La zone elle-même ne pourra pas être restaurée.</item>
+    </plurals>
+    <string name="list_areas">Zones</string>
 </resources>

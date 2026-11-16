@@ -15,13 +15,17 @@ data class WidgetSnapshot(
     val lists: Map<String, List<Item>>,
     val projects: List<Item>,
 ) {
+    /** [canToggle]: the widget may check it (see [ThingsLibrary.canComplete]); otherwise its circle opens it. */
     @Serializable
-    data class Item(val id: String, val title: String)
+    data class Item(val id: String, val title: String, val canToggle: Boolean = true)
 
     fun items(key: String): List<Item> = lists[key].orEmpty()
 
     fun label(key: String): String =
         LIST_LABELS[key] ?: projects.firstOrNull { "$PROJECT_PREFIX${it.id}" == key }?.title ?: "Things"
+
+    /** The same lists without [id]: what the widget shows right after it is checked. */
+    fun without(id: String): WidgetSnapshot = copy(lists = lists.mapValues { (_, items) -> items.filterNot { it.id == id } })
 
     fun toJson(): String = Json.encodeToString(serializer(), this)
 
@@ -38,8 +42,9 @@ data class WidgetSnapshot(
         )
 
         fun from(library: ThingsLibrary, today: LocalDate, updatedAtMillis: Long): WidgetSnapshot {
-            fun List<Task>.items() = map { Item(it.id, it.title) }
+            fun List<Task>.items() = map { Item(it.id, it.title, canToggle = library.canComplete(it)) }
             val projects = library.projects()
+            // Open to-dos only: a to-do checked from the widget leaves it.
             val lists = mapOf(
                 "today" to library.today(today).items(),
                 "inbox" to library.inbox().items(),
@@ -47,9 +52,12 @@ data class WidgetSnapshot(
                 "anytime" to library.anytime(today).items(),
                 "someday" to library.someday().items(),
             ) + projects.associate { "$PROJECT_PREFIX${it.id}" to library.projectTasks(it.id).items() }
-            return WidgetSnapshot(updatedAtMillis, lists, projects.items())
+            return WidgetSnapshot(updatedAtMillis, lists, projects.map { Item(it.id, it.title) })
         }
 
-        fun fromJson(json: String): WidgetSnapshot = Json.decodeFromString(serializer(), json)
+        /** Lenient: a snapshot written by another app version still reads. */
+        fun fromJson(json: String): WidgetSnapshot = lenient.decodeFromString(serializer(), json)
+
+        private val lenient = Json { ignoreUnknownKeys = true }
     }
 }

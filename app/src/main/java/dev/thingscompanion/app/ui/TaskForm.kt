@@ -81,6 +81,7 @@ data class TaskDraft(
     val schedule: Schedule = Schedule.Inbox,
     val reminder: LocalTime? = null,
     val checklist: List<ChecklistDraft> = emptyList(),
+    val deadline: LocalDate? = null,
 )
 
 private val checklistSaver = listSaver<SnapshotStateList<ChecklistDraft>, String>(
@@ -106,7 +107,9 @@ fun TaskFormScreen(
     allowSchedule: Boolean,
     allowInbox: Boolean,
     allowChecklist: Boolean,
-    onSubmit: (title: String, notes: String, schedule: Schedule, reminder: LocalTime?, checklist: List<ChecklistDraft>) -> Unit,
+    allowDeadline: Boolean,
+    onSubmit: (title: String, notes: String, schedule: Schedule, reminder: LocalTime?, checklist: List<ChecklistDraft>, deadline: LocalDate?) -> Unit,
+    allowReminder: Boolean = true,
     onDismiss: () -> Unit,
 ) {
     val today = ThingsDay.today()
@@ -126,6 +129,8 @@ fun TaskFormScreen(
     var pickingDate by remember { mutableStateOf(false) }
     var reminderMinute by rememberSaveable { mutableStateOf(initial.reminder?.let { it.hour * 60 + it.minute }) }
     var pickingTime by remember { mutableStateOf(false) }
+    var deadlineDay by rememberSaveable { mutableStateOf(initial.deadline?.toEpochDay()) }
+    var pickingDeadline by remember { mutableStateOf(false) }
     // One tap on Save: the form closes at once, a second tap must not queue the change twice.
     var submitted by remember { mutableStateOf(false) }
     var focusRowId by remember { mutableStateOf<String?>(null) }
@@ -144,6 +149,16 @@ fun TaskFormScreen(
                 reminderMinute = it.hour * 60 + it.minute
             },
             onDismiss = { pickingTime = false },
+        )
+    }
+    if (pickingDeadline) {
+        DayPickerDialog(
+            today = today,
+            onPicked = { day ->
+                pickingDeadline = false
+                deadlineDay = day.toEpochDay()
+            },
+            onDismiss = { pickingDeadline = false },
         )
     }
     if (pickingDate) {
@@ -175,9 +190,10 @@ fun TaskFormScreen(
                 WhenChoice.SOMEDAY -> Schedule.Someday
             }
         }
-        val reminder = if (!allowSchedule) initial.reminder else
+        val reminder = if (!allowSchedule || !allowReminder) initial.reminder?.takeIf { schedule.date != null } else
             reminderMinute?.takeIf { schedule.date != null }?.let { LocalTime.of(it / 60, it % 60) }
-        onSubmit(title, notes, schedule, reminder, checklist.toList())
+        val deadline = if (allowDeadline) deadlineDay?.let(LocalDate::ofEpochDay) else initial.deadline
+        onSubmit(title, notes, schedule, reminder, checklist.toList(), deadline)
     }
 
     Scaffold(
@@ -218,6 +234,8 @@ fun TaskFormScreen(
                 onValueChange = { notes = it },
                 label = { Text(stringResource(R.string.notes)) },
                 minLines = 3,
+                // Markdown styled as you type, as in Things.
+                visualTransformation = MarkdownTransformation(markdownColors()),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -279,7 +297,7 @@ fun TaskFormScreen(
                     }
                 }
                 // A reminder needs a day: only offered once Today, This Evening or a date is chosen.
-                if (whenChoice.hasDay) {
+                if (allowReminder && whenChoice.hasDay) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = reminderMinute != null,
@@ -302,6 +320,24 @@ fun TaskFormScreen(
                                 label = { Text(stringResource(R.string.no_reminder)) },
                             )
                         }
+                    }
+                }
+            }
+
+            if (allowDeadline) {
+                Text(stringResource(R.string.deadline), style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = deadlineDay != null,
+                        onClick = {
+                            hideKeyboard()
+                            pickingDeadline = true
+                        },
+                        label = { Text(deadlineDay?.let { LocalDate.ofEpochDay(it).format(dateFormat) } ?: stringResource(R.string.add_deadline)) },
+                        leadingIcon = { DeadlineFlag() },
+                    )
+                    if (deadlineDay != null) {
+                        FilterChip(selected = false, onClick = { deadlineDay = null }, label = { Text(stringResource(R.string.no_deadline)) })
                     }
                 }
             }

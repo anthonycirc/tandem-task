@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -38,6 +39,22 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import dev.thingscompanion.cloud.Area
+import androidx.compose.ui.draw.shadow
+import androidx.compose.runtime.toMutableStateList
+import androidx.compose.foundation.lazy.rememberLazyListState
+import sh.calvin.reorderable.rememberReorderableLazyListState
+import sh.calvin.reorderable.ReorderableItem
+import dev.thingscompanion.cloud.StartList
+import dev.thingscompanion.cloud.PendingChange
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -110,6 +127,7 @@ enum class ListTab(@StringRes val label: Int, val kind: ListKind) {
     ANYTIME(R.string.list_anytime, ListKind.ANYTIME),
     SOMEDAY(R.string.list_someday, ListKind.SOMEDAY),
     PROJECTS(R.string.list_projects, ListKind.PROJECT),
+    AREAS(R.string.list_areas, ListKind.AREA),
     TRASH(R.string.list_trash, ListKind.TRASH),
 }
 
@@ -183,8 +201,14 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     var filtering by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
     var projectId by rememberSaveable { mutableStateOf<String?>(null) }
+    var areaId by rememberSaveable { mutableStateOf<String?>(null) }
     var taskId by rememberSaveable { mutableStateOf<String?>(null) }
     var schedulingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var addMenu by remember { mutableStateOf(false) }
+    var addingProject by rememberSaveable { mutableStateOf(false) }
+    var naming by remember { mutableStateOf<NameRequest?>(null) }
+    var movingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var deletingAreaId by rememberSaveable { mutableStateOf<String?>(null) }
 
     // A widget tap asked to open the add form or a to-do.
     LaunchedEffect(state.launchOpenAdd, state.launchTaskId) {
@@ -194,23 +218,111 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     }
 
     // The forms take the whole screen: Save stays in the top bar, above the keyboard.
+    // Added from a project or an area, the to-do is filed there.
+    val addInProject = projectId?.takeIf { library?.task(it) != null }
+    val addInArea = areaId?.takeIf { addInProject == null && library?.area(it) != null }
     if (adding) {
+        val filed = addInProject != null || addInArea != null
         TaskFormScreen(
-            initial = TaskDraft(schedule = if (tab == ListTab.TODAY) Schedule.Today(ThingsDay.today()) else Schedule.Inbox),
+            initial = TaskDraft(
+                schedule = when {
+                    filed -> Schedule.Anytime
+                    tab == ListTab.TODAY -> Schedule.Today(ThingsDay.today())
+                    else -> Schedule.Inbox
+                },
+            ),
             heading = R.string.new_todo_title,
             confirm = R.string.add,
             allowSchedule = true,
-            allowInbox = true,
+            allowInbox = !filed,
             allowChecklist = true,
-            onSubmit = { title, notes, schedule, reminder, checklist ->
+            allowDeadline = true,
+            onSubmit = { title, notes, schedule, reminder, checklist, deadline ->
                 adding = false
-                viewModel.addTask(title, notes, schedule, reminder, checklist)
+                viewModel.addTask(title, notes, schedule, reminder, checklist, deadline, projectId = addInProject, areaId = addInArea)
             },
             onDismiss = { adding = false },
         )
         return
     }
+    if (addingProject) {
+        TaskFormScreen(
+            initial = TaskDraft(schedule = Schedule.Anytime),
+            heading = R.string.new_project_title,
+            confirm = R.string.add,
+            allowSchedule = true,
+            allowInbox = false,
+            allowChecklist = false,
+            allowDeadline = true,
+            allowReminder = false,
+            onSubmit = { title, notes, schedule, _, _, deadline ->
+                addingProject = false
+                viewModel.addProject(title, notes, schedule, deadline, areaId = addInArea)
+            },
+            onDismiss = { addingProject = false },
+        )
+        return
+    }
+    val moving = movingId?.let { library?.task(it) }
+    if (moving != null && library != null) {
+        MoveDialog(
+            library = library,
+            item = moving,
+            onPick = { destination ->
+                movingId = null
+                if (moving.type == TaskType.PROJECT) viewModel.moveProject(moving.id, destination.areaId) else viewModel.moveTask(moving.id, destination)
+            },
+            onDismiss = { movingId = null },
+        )
+    }
+    val deletingArea = deletingAreaId?.let { library?.area(it) }
+    if (deletingArea != null && library != null) {
+        val count = library.areaContents(deletingArea.id).size
+        AlertDialog(
+            onDismissRequest = { deletingAreaId = null },
+            title = { Text(stringResource(R.string.delete_area_title, deletingArea.title)) },
+            text = { Text(pluralStringResource(R.plurals.delete_area_contents, count, count)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    deletingAreaId = null
+                    areaId = null
+                    viewModel.deleteArea(deletingArea.id)
+                }) { Text(stringResource(R.string.delete_area)) }
+            },
+            dismissButton = { TextButton(onClick = { deletingAreaId = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+    naming?.let { request ->
+        NameDialog(
+            title = stringResource(request.title),
+            initial = request.initial,
+            onConfirm = { name ->
+                naming = null
+                request.onName(name)
+            },
+            onDismiss = { naming = null },
+        )
+    }
     val edited = editingId?.let { library?.task(it) }
+    if (edited != null && library != null && edited.type == TaskType.PROJECT) {
+        // A project: title, notes, When and deadline; no checklist, reminder or Inbox.
+        TaskFormScreen(
+            initial = TaskDraft(edited.title, edited.notes.orEmpty(), Schedule.of(edited, ThingsDay.today()), edited.reminder, deadline = edited.deadline),
+            heading = R.string.edit_project_title,
+            confirm = R.string.save,
+            allowSchedule = library.canEditProject(edited),
+            allowInbox = false,
+            allowChecklist = false,
+            allowDeadline = library.canSetDeadline(edited),
+            allowReminder = false,
+            onSubmit = { title, notes, schedule, reminder, _, deadline ->
+                editingId = null
+                viewModel.editTask(edited.id, title, notes, schedule, reminder, deadline = deadline)
+            },
+            onDismiss = { editingId = null },
+        )
+        return
+    }
     if (edited != null && library != null) {
         TaskFormScreen(
             initial = TaskDraft(
@@ -219,15 +331,17 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 Schedule.of(edited, ThingsDay.today()),
                 edited.reminder,
                 library.checklist(edited.id).map { ChecklistDraft(it.id, it.title, it.done) },
+                edited.deadline,
             ),
             heading = R.string.edit_todo_title,
             confirm = R.string.save,
             allowSchedule = library.canReschedule(edited),
             allowInbox = edited.projectId == null && edited.areaId == null,
             allowChecklist = library.canEditChecklist(edited),
-            onSubmit = { title, notes, schedule, reminder, checklist ->
+            allowDeadline = library.canSetDeadline(edited),
+            onSubmit = { title, notes, schedule, reminder, checklist, deadline ->
                 editingId = null
-                viewModel.editTask(edited.id, title, notes, schedule, reminder, checklist.takeIf { library.canEditChecklist(edited) })
+                viewModel.editTask(edited.id, title, notes, schedule, reminder, checklist.takeIf { library.canEditChecklist(edited) }, deadline)
             },
             onDismiss = { editingId = null },
         )
@@ -256,13 +370,20 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
         FilterDialog(library, filter, onChange = viewModel::setFilter, onDismiss = { filtering = false })
     }
 
-    BackHandler(enabled = taskId != null || projectId != null) {
-        if (taskId != null) taskId = null else projectId = null
+    // Back closes the to-do, then the project, then the area it was opened from.
+    fun back() {
+        when {
+            taskId != null -> taskId = null
+            projectId != null -> projectId = null
+            else -> areaId = null
+        }
     }
+    BackHandler(enabled = taskId != null || projectId != null || areaId != null) { back() }
 
     val today = ThingsDay.today()
     val openTask = taskId?.let { library?.task(it) }
     val openProject = projectId?.let { library?.task(it) }
+    val openArea = areaId?.let { library?.area(it) }
     val rowActions = RowActions(
         onOpen = { taskId = it.id },
         onSetDone = viewModel::setDone,
@@ -286,21 +407,58 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
             if (library != null && taskId == null && tab != ListTab.TRASH) {
-                FloatingActionButton(onClick = { adding = true }, containerColor = ListColors.checked, contentColor = Color.White) {
-                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.add_to_inbox))
+                // In a project, an area or Projects, + offers what can be created there, as in Things.
+                val choices = buildList {
+                    val project = projectId?.let { library.task(it) }
+                    when {
+                        project != null -> {
+                            add(R.string.new_todo_title to { adding = true })
+                            if (library.canEditProject(project)) {
+                                add(R.string.new_heading_title to {
+                                    naming = NameRequest(R.string.new_heading_title) { viewModel.addHeading(project.id, it) }
+                                })
+                            }
+                        }
+                        areaId != null -> {
+                            add(R.string.new_todo_title to { adding = true })
+                            add(R.string.new_project_title to { addingProject = true })
+                        }
+                        tab == ListTab.AREAS -> add(R.string.new_area_title to { naming = NameRequest(R.string.new_area_title) { viewModel.addArea(it) } })
+                        tab == ListTab.PROJECTS -> {
+                            add(R.string.new_project_title to { addingProject = true })
+                            add(R.string.new_area_title to { naming = NameRequest(R.string.new_area_title) { viewModel.addArea(it) } })
+                        }
+                    }
+                }
+                Box {
+                    FloatingActionButton(
+                        onClick = { if (choices.isEmpty()) adding = true else addMenu = true },
+                        containerColor = ListColors.checked,
+                        contentColor = Color.White,
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.add_to_inbox))
+                    }
+                    DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }) {
+                        choices.forEach { (label, action) ->
+                            DropdownMenuItem(text = { Text(stringResource(label)) }, onClick = {
+                                addMenu = false
+                                action()
+                            })
+                        }
+                    }
                 }
             }
         },
         topBar = {
             TopAppBar(
                 title = {
-                    if (taskId == null && projectId == null) {
+                    if (taskId == null && projectId == null && areaId == null) {
                         Text(stringResource(R.string.app_name), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 },
                 navigationIcon = {
-                    if (taskId != null || projectId != null) {
-                        IconButton(onClick = { if (taskId != null) taskId = null else projectId = null }) {
+                    if (taskId != null || projectId != null || areaId != null) {
+                        IconButton(onClick = ::back) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                         }
                     }
@@ -315,6 +473,11 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                         if (openTask.type == TaskType.TODO && !openTask.trashed) {
                             IconButton(onClick = { editingId = openTask.id }) {
                                 Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.edit))
+                            }
+                        }
+                        if (library.canMove(openTask)) {
+                            IconButton(onClick = { movingId = openTask.id }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.move))
                             }
                         }
                         if (library.canTrash(openTask)) {
@@ -355,16 +518,72 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                     onSetDone = viewModel::setDone,
                     onChecklistDone = viewModel::setChecklistItemDone,
                     onAddChecklistItem = viewModel::addChecklistItem,
+                    onDeleteChecklistItem = viewModel::deleteChecklistItem,
                     onRestore = viewModel::restore,
                 )
                 openProject != null -> {
                     if (!filter.isEmpty) ActiveFilters(library, filter, viewModel::setFilter)
                     TaskList(
                         library = library,
-                        header = { ListHeader(ListKind.PROJECT, openProject.title) },
-                        groups = listOf(Group.None to filter.apply(library.projectTasks(openProject.id, closedOn = today))),
+                        header = {
+                            ProjectHeader(
+                                library = library,
+                                project = openProject,
+                                onEdit = { editingId = openProject.id },
+                                onMove = { movingId = openProject.id },
+                                onTrash = {
+                                    projectId = null
+                                    viewModel.trash(openProject.id)
+                                },
+                                onStatus = { viewModel.setProjectStatus(openProject.id, it) },
+                            )
+                        },
+                        // Things' headings; with a filter on, headings left empty are hidden.
+                        groups = library.projectSections(openProject.id, closedOn = today)
+                            .map { section -> (section.heading?.let { Group.Heading(it.id, it.title) } ?: Group.None) to filter.apply(section.tasks) }
+                            .filter { (group, tasks) -> filter.isEmpty || group !is Group.Heading || tasks.isNotEmpty() },
                         emptyText = stringResource(R.string.no_open_todos),
                         actions = rowActions,
+                        onHeading = { heading ->
+                            naming = NameRequest(R.string.rename_heading, heading.title) { viewModel.renameHeading(heading.id, it) }
+                        },
+                        // Dragging needs the whole list: off while a filter hides rows.
+                        onDrop = { task: Task, section: Group, order: List<String> ->
+                            viewModel.dropInProject(openProject.id, task.id, (section as? Group.Heading)?.id, order)
+                        }.takeIf { filter.isEmpty },
+                        onHeadingsDrop = { headingId: String, order: List<String> -> viewModel.reorder(headingId, order, "headings:${openProject.id}") }
+                            .takeIf { filter.isEmpty },
+                    )
+                }
+                openArea != null -> {
+                    if (!filter.isEmpty) ActiveFilters(library, filter, viewModel::setFilter)
+                    TaskList(
+                        library = library,
+                        header = {
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(Modifier.weight(1f)) { ListHeader(ListKind.AREA, openArea.title) }
+                                    IconButton(onClick = {
+                                        naming = NameRequest(R.string.rename_area, openArea.title) { viewModel.renameArea(openArea.id, it) }
+                                    }) { Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.rename_area)) }
+                                    IconButton(onClick = { deletingAreaId = openArea.id }) {
+                                        Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.delete_area))
+                                    }
+                                }
+                                library.areaProjects(openArea.id).forEach { project ->
+                                    SwipeActions(
+                                        canReschedule = false,
+                                        canTrash = library.canTrash(project),
+                                        onReschedule = {},
+                                        onTrash = { viewModel.trash(project.id) },
+                                    ) { ProjectRow(library, project) { projectId = it.id } }
+                                }
+                            }
+                        },
+                        groups = listOf(Group.None to filter.apply(library.areaTasks(openArea.id, closedOn = today))),
+                        emptyText = "",
+                        actions = rowActions,
+                        onDrop = { task: Task, _: Group, order: List<String> -> viewModel.reorder(task.id, order, "area:${openArea.id}") }.takeIf { filter.isEmpty },
                     )
                 }
                 else -> {
@@ -378,10 +597,18 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             )
                         }
                     }
-                    if (!filter.isEmpty && tab != ListTab.PROJECTS && tab != ListTab.TRASH) ActiveFilters(library, filter, viewModel::setFilter)
+                    if (!filter.isEmpty && tab != ListTab.PROJECTS && tab != ListTab.AREAS && tab != ListTab.TRASH) ActiveFilters(library, filter, viewModel::setFilter)
                     val title = stringResource(tab.label)
                     when (tab) {
-                        ListTab.PROJECTS -> ProjectList(library, title) { projectId = it.id }
+                        ListTab.PROJECTS -> ProjectList(
+                            library = library,
+                            title = title,
+                            onOpenArea = { areaId = it },
+                            onDrop = { project, area, order -> viewModel.dropProject(project.id, area, order) },
+                            onTrashProject = { viewModel.trash(it.id) },
+                            onDeleteArea = { deletingAreaId = it.id },
+                        ) { projectId = it.id }
+                        ListTab.AREAS -> AreaList(library, title, onOpen = { areaId = it.id }, onDelete = { deletingAreaId = it.id })
                         ListTab.TRASH -> TaskList(
                             library = library,
                             header = { ListHeader(ListKind.TRASH, title) },
@@ -416,6 +643,14 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                                 emptyText = stringResource(R.string.nothing_here),
                                 actions = rowActions,
                                 showWhen = tab != ListTab.TODAY && tab != ListTab.UPCOMING,
+                                // Upcoming is ordered by date; dragging needs the whole list, so not while filtering.
+                                onDrop = { task: Task, section: Group, order: List<String> ->
+                                    if (tab == ListTab.TODAY) {
+                                        viewModel.reorder(task.id, order, "today:${section == Group.Evening}", todayOrder = true, evening = section == Group.Evening)
+                                    } else {
+                                        viewModel.reorder(task.id, order, tab.name)
+                                    }
+                                }.takeIf { filter.isEmpty && tab != ListTab.UPCOMING },
                             )
                         }
                     }
@@ -433,9 +668,95 @@ private class RowActions(
     val onReschedule: (Task) -> Unit,
 )
 
-/** A section of a list: Today's This Evening, a day of Upcoming, or none. */
+/**
+ * Where to move a to-do (Inbox, a project, one of its headings, an area) or a project (an area,
+ * or none). The current place is marked.
+ */
+@Composable
+private fun MoveDialog(library: ThingsLibrary, item: Task, onPick: (PendingChange.Destination) -> Unit, onDismiss: () -> Unit) {
+    val isProject = item.type == TaskType.PROJECT
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    @Composable
+    fun Choice(kind: ListKind?, label: String, indent: Int, current: Boolean, destination: PendingChange.Destination) {
+        Row(
+            Modifier.fillMaxWidth().clickable(enabled = !current) { onPick(destination) }.padding(start = (8 + indent * 20).dp, top = 10.dp, bottom = 10.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (kind != null) ListIcon(kind, size = 18.dp) else Spacer(Modifier.width(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(label, color = if (current) muted else Color.Unspecified, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            if (current) Text("✓", color = muted)
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(if (isProject) R.string.move_to_area else R.string.move)) },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                if (isProject) {
+                    item { Choice(null, stringResource(R.string.no_area), 0, item.areaId == null, PendingChange.Destination()) }
+                    items(library.areas(), key = { it.id }) { area ->
+                        Choice(ListKind.AREA, area.title, 0, item.areaId == area.id, PendingChange.Destination(areaId = area.id))
+                    }
+                } else {
+                    item {
+                        Choice(ListKind.INBOX, stringResource(R.string.list_inbox), 0, item.start == StartList.INBOX && item.projectId == null && item.areaId == null, PendingChange.Destination(inbox = true))
+                    }
+                    fun LazyListScope.project(project: Task, indent: Int) {
+                        item(key = project.id) {
+                            Choice(ListKind.PROJECT, project.title, indent, item.projectId == project.id && item.headingId == null, PendingChange.Destination(projectId = project.id))
+                        }
+                        library.projectSections(project.id).mapNotNull { it.heading }.forEach { heading ->
+                            item(key = heading.id) {
+                                Choice(null, heading.title, indent + 1, item.headingId == heading.id, PendingChange.Destination(headingId = heading.id))
+                            }
+                        }
+                    }
+                    library.projects().filter { it.areaId == null }.forEach { project(it, 0) }
+                    library.areas().forEach { area ->
+                        item(key = area.id) {
+                            Choice(ListKind.AREA, area.title, 0, item.projectId == null && item.areaId == area.id, PendingChange.Destination(areaId = area.id))
+                        }
+                        library.areaProjects(area.id).forEach { project(it, 1) }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+/** A name to ask for: a new heading or area, or a new name for one. */
+private class NameRequest(@StringRes val title: Int, val initial: String = "", val onName: (String) -> Unit)
+
+@Composable
+private fun NameDialog(title: String, initial: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+    var name by rememberSaveable { mutableStateOf(initial) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { if (name.isNotBlank()) onConfirm(name) }),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus),
+            )
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+/** A section of a list: Today's This Evening, a day of Upcoming, a project's heading, or none. */
 private sealed interface Group {
     data object None : Group
+    data class Heading(val id: String, val title: String) : Group
     data object Evening : Group
     data class Day(val date: LocalDate) : Group
 }
@@ -451,9 +772,13 @@ private fun ListHeader(kind: ListKind, title: String) {
 }
 
 @Composable
-private fun GroupHeader(group: Group) {
+private fun GroupHeader(group: Group, onHeading: (Group.Heading) -> Unit = {}) {
     when (group) {
         Group.None -> Unit
+        is Group.Heading -> Column(Modifier.clickable { onHeading(group) }.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 4.dp)) {
+            Text(group.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ListColors.heading)
+            HorizontalDivider(Modifier.padding(top = 6.dp), color = ListColors.heading.copy(alpha = 0.4f))
+        }
         Group.Evening -> Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ListIcon(ListKind.EVENING, size = 18.dp)
@@ -485,6 +810,22 @@ private fun dayLabel(date: LocalDate): String {
     }.replaceFirstChar { it.titlecase() }
 }
 
+/** A row of a [TaskList]: a section header or a to-do. */
+private sealed interface ListRow {
+    val key: String
+}
+
+private data class HeaderRow(val group: Group, override val key: String) : ListRow
+
+private data class TaskItemRow(val task: Task) : ListRow {
+    override val key get() = task.id
+}
+
+/**
+ * A list of to-dos in sections. With [onDrop], a long press lifts a to-do to drag it: dropped, it
+ * reports its section and that section's new order. With [onHeadingsDrop], headings are dragged
+ * the same way and report the headings' new order.
+ */
 @Composable
 private fun TaskList(
     library: ThingsLibrary,
@@ -493,35 +834,90 @@ private fun TaskList(
     emptyText: String,
     actions: RowActions,
     showWhen: Boolean = true,
+    onHeading: (Group.Heading) -> Unit = {},
+    onDrop: ((task: Task, section: Group, order: List<String>) -> Unit)? = null,
+    onHeadingsDrop: ((headingId: String, order: List<String>) -> Unit)? = null,
 ) {
-    LazyColumn(Modifier.fillMaxSize()) {
+    val built = remember(groups) {
+        groups.withIndex().flatMap { (index, entry) ->
+            val (group, tasks) = entry
+            // A heading shows even when empty, as in Things.
+            if (tasks.isEmpty() && group !is Group.Heading) emptyList()
+            else listOf(HeaderRow(group, "group-" + ((group as? Group.Heading)?.id ?: index.toString()))) + tasks.map(::TaskItemRow)
+        }
+    }
+    // The rows as dragged; rebuilt from the lists whenever they change.
+    val rows = remember(built) { built.toMutableStateList() }
+    val listState = rememberLazyListState()
+    val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+        val fromIndex = rows.indexOfFirst { it.key == from.key }
+        val toIndex = rows.indexOfFirst { it.key == to.key }
+        // Nothing goes above the first section's header.
+        if (fromIndex < 0 || toIndex <= 0) return@rememberReorderableLazyListState
+        rows.add(toIndex, rows.removeAt(fromIndex))
+    }
+    fun dropped(key: String) {
+        val index = rows.indexOfFirst { it.key == key }
+        when (val row = rows.getOrNull(index)) {
+            is TaskItemRow -> {
+                val headerIndex = (index downTo 0).first { rows[it] is HeaderRow }
+                val section = (rows[headerIndex] as HeaderRow).group
+                val order = rows.drop(headerIndex + 1).takeWhile { it is TaskItemRow }.map { it.key }
+                onDrop?.invoke(row.task, section, order)
+            }
+            is HeaderRow -> {
+                val heading = row.group as? Group.Heading ?: return
+                onHeadingsDrop?.invoke(heading.id, rows.mapNotNull { ((it as? HeaderRow)?.group as? Group.Heading)?.id })
+            }
+            null -> Unit
+        }
+    }
+    fun draggable(row: ListRow) = when (row) {
+        is TaskItemRow -> onDrop != null && row.task.isOpen && library.canReorder(row.task)
+        is HeaderRow -> onHeadingsDrop != null && row.group is Group.Heading
+    }
+    LazyColumn(Modifier.fillMaxSize(), state = listState) {
         item(key = "header") { header() }
-        if (groups.all { it.second.isEmpty() }) {
+        if (groups.all { it.second.isEmpty() && it.first !is Group.Heading }) {
             item(key = "empty") {
                 Text(emptyText, Modifier.padding(20.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        groups.forEachIndexed { index, (group, tasks) ->
-            if (tasks.isNotEmpty()) {
-                item(key = "group-$index") { GroupHeader(group) }
-                taskRows(library, tasks, actions, showWhen)
+        items(rows, key = { it.key }) { row ->
+            ReorderableItem(reorderState, key = row.key, enabled = draggable(row)) { dragging ->
+                val handle = if (draggable(row)) Modifier.longPressDraggableHandle(onDragStopped = { dropped(row.key) }) else Modifier
+                val lifted = if (dragging) Modifier.shadow(8.dp) else Modifier
+                Box(handle.then(lifted)) {
+                    when (row) {
+                        is HeaderRow -> {
+                            // A heading swiped right goes to the Trash with its to-dos.
+                            val heading = (row.group as? Group.Heading)?.let { library.task(it.id) }
+                            SwipeActions(
+                                canReschedule = false,
+                                canTrash = heading != null && library.canTrash(heading),
+                                onReschedule = {},
+                                onTrash = { heading?.let { actions.onTrash(it.id) } },
+                            ) {
+                                Box(Modifier.background(MaterialTheme.colorScheme.surface)) { GroupHeader(row.group, onHeading) }
+                            }
+                        }
+                        is TaskItemRow -> {
+                            val task = row.task
+                            SwipeActions(
+                                canReschedule = library.canReschedule(task) && task.isOpen,
+                                canTrash = library.canTrash(task),
+                                onReschedule = { actions.onReschedule(task) },
+                                onTrash = { actions.onTrash(task.id) },
+                            ) {
+                                TaskRow(library, task, actions, showWhen)
+                            }
+                        }
+                    }
+                }
             }
         }
         // Room for the add button over the last row.
         item(key = "footer") { Spacer(Modifier.height(88.dp)) }
-    }
-}
-
-private fun LazyListScope.taskRows(library: ThingsLibrary, tasks: List<Task>, actions: RowActions, showWhen: Boolean) {
-    items(tasks, key = { it.id }) { task ->
-        SwipeActions(
-            canReschedule = library.canReschedule(task) && task.isOpen,
-            canTrash = library.canTrash(task),
-            onReschedule = { actions.onReschedule(task) },
-            onTrash = { actions.onTrash(task.id) },
-        ) {
-            TaskRow(library, task, actions, showWhen)
-        }
     }
 }
 
@@ -728,44 +1124,223 @@ private fun NotesGlyph(color: Color) {
     }
 }
 
-/** Projects grouped by area, as in the Things sidebar. */
+/**
+ * Projects without an area, then each area with its projects, as in Things. A long press lifts a
+ * project: dropped under another area it moves there, and its area's new order is reported.
+ */
 @Composable
-private fun ProjectList(library: ThingsLibrary, title: String, onOpen: (Task) -> Unit) {
+private fun ProjectList(
+    library: ThingsLibrary,
+    title: String,
+    onOpenArea: (String) -> Unit,
+    onDrop: ((project: Task, areaId: String?, order: List<String>) -> Unit)?,
+    onTrashProject: (Task) -> Unit,
+    onDeleteArea: (Area) -> Unit,
+    onOpen: (Task) -> Unit,
+) {
     val projects = library.projects()
-    val byArea = projects.groupBy { it.areaId }
-    LazyColumn(Modifier.fillMaxSize()) {
+    val areas = library.areas()
+    // Area headers (the first, with no area, draws nothing) and projects, in display order.
+    val built = remember(library) {
+        listOf<Pair<String, Any?>>("area-none" to null) + projects.filter { it.areaId == null }.map { it.id to it } +
+            areas.flatMap { area -> listOf("area-${area.id}" to area) + library.areaProjects(area.id).map { it.id to it } }
+    }
+    val rows = remember(built) { built.toMutableStateList() }
+    val listState = rememberLazyListState()
+    val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+        val fromIndex = rows.indexOfFirst { it.first == from.key }
+        val toIndex = rows.indexOfFirst { it.first == to.key }
+        if (fromIndex < 0 || toIndex <= 0) return@rememberReorderableLazyListState
+        rows.add(toIndex, rows.removeAt(fromIndex))
+    }
+    fun dropped(project: Task) {
+        val index = rows.indexOfFirst { it.first == project.id }
+        if (index < 0) return
+        val headerIndex = (index downTo 0).first { rows[it].second !is Task }
+        val area = rows[headerIndex].second as? Area
+        val order = rows.drop(headerIndex + 1).takeWhile { it.second is Task }.map { it.first }
+        onDrop?.invoke(project, area?.id, order)
+    }
+    LazyColumn(Modifier.fillMaxSize(), state = listState) {
         item(key = "header") { ListHeader(ListKind.PROJECT, title) }
-        if (projects.isEmpty()) {
+        if (projects.isEmpty() && areas.isEmpty()) {
             item(key = "empty") { Text(stringResource(R.string.nothing_here), Modifier.padding(20.dp)) }
         }
-        val sections = listOf<String?>(null) + library.areas().map { it.id }
-        sections.forEach { areaId ->
-            val inArea = byArea[areaId].orEmpty()
-            if (inArea.isEmpty()) return@forEach
-            if (areaId != null) {
-                item(key = "area-$areaId") {
-                    Text(
-                        library.area(areaId)?.title.orEmpty(),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 4.dp),
-                    )
-                }
-            }
-            items(inArea, key = { it.id }) { project ->
-                Row(
-                    Modifier.fillMaxWidth().clickable { onOpen(project) }.padding(horizontal = 20.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    ListIcon(ListKind.PROJECT, size = 20.dp)
-                    Spacer(Modifier.width(12.dp))
-                    Text(project.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    val open = library.projectTasks(project.id).size
-                    if (open > 0) Text(open.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        items(rows, key = { it.first }) { (key, value) ->
+            val project = value as? Task
+            val canDrag = project != null && onDrop != null && library.canEditProject(project)
+            ReorderableItem(reorderState, key = key, enabled = canDrag) { dragging ->
+                val handle = if (canDrag) Modifier.longPressDraggableHandle(onDragStopped = { dropped(project!!) }) else Modifier
+                Box(handle.then(if (dragging) Modifier.shadow(8.dp) else Modifier).background(MaterialTheme.colorScheme.surface)) {
+                    when (value) {
+                        is Task -> SwipeActions(
+                            canReschedule = false,
+                            canTrash = library.canTrash(value),
+                            onReschedule = {},
+                            onTrash = { onTrashProject(value) },
+                        ) { ProjectRow(library, value, onOpen) }
+                        // Every area, even one without projects, opens on its own to-dos and projects as in Things.
+                        // Swiped right, an area asks before it is deleted.
+                        is Area -> SwipeActions(canReschedule = false, canTrash = true, onReschedule = {}, onTrash = { onDeleteArea(value) }) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .clickable { onOpenArea(value.id) }
+                                    .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                ListIcon(ListKind.AREA, size = 20.dp)
+                                Spacer(Modifier.width(12.dp))
+                                Text(value.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                        else -> Spacer(Modifier.height(1.dp))
+                    }
                 }
             }
         }
         item(key = "footer") { Spacer(Modifier.height(88.dp)) }
+    }
+}
+
+/**
+ * An open project's title with Things' actions: its circle completes it (asking first when
+ * to-dos are still open, since they are completed with it), the pencil edits it, and the menu
+ * cancels or reopens it.
+ */
+@Composable
+private fun ProjectHeader(
+    library: ThingsLibrary,
+    project: Task,
+    onEdit: () -> Unit,
+    onMove: () -> Unit,
+    onTrash: () -> Unit,
+    onStatus: (TaskStatus) -> Unit,
+) {
+    val editable = library.canEditProject(project)
+    var confirming by remember { mutableStateOf<TaskStatus?>(null) }
+    var menu by remember { mutableStateOf(false) }
+    val openCount = library.openChildren(project).count { it.type == TaskType.TODO }
+    fun request(status: TaskStatus) {
+        if (status != TaskStatus.OPEN && openCount > 0) confirming = status else onStatus(status)
+    }
+    confirming?.let { status ->
+        AlertDialog(
+            onDismissRequest = { confirming = null },
+            title = { Text(stringResource(if (status == TaskStatus.COMPLETED) R.string.complete_project else R.string.cancel_project)) },
+            text = {
+                Text(pluralStringResource(if (status == TaskStatus.COMPLETED) R.plurals.complete_project_todos else R.plurals.cancel_project_todos, openCount, openCount))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirming = null
+                    onStatus(status)
+                }) { Text(stringResource(if (status == TaskStatus.COMPLETED) R.string.complete_project else R.string.cancel_project)) }
+            },
+            dismissButton = { TextButton(onClick = { confirming = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+    Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ThingsCheckbox(
+                checked = project.status == TaskStatus.COMPLETED,
+                onCheckedChange = { request(if (it) TaskStatus.COMPLETED else TaskStatus.OPEN) },
+                enabled = editable,
+                size = 26.dp,
+                contentDescription = stringResource(R.string.complete_project),
+            )
+            Text(
+                project.title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textDecoration = if (project.isOpen) null else TextDecoration.LineThrough,
+                modifier = Modifier.weight(1f),
+            )
+            if (editable) {
+                IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.edit)) }
+                Box {
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.more)) }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.move_to_area)) }, onClick = {
+                            menu = false
+                            onMove()
+                        })
+                        DropdownMenuItem(text = { Text(stringResource(R.string.delete_project)) }, onClick = {
+                            menu = false
+                            onTrash()
+                        })
+                        if (project.status == TaskStatus.OPEN) {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.cancel_project)) }, onClick = {
+                                menu = false
+                                request(TaskStatus.CANCELLED)
+                            })
+                        } else {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.reopen_project)) }, onClick = {
+                                menu = false
+                                onStatus(TaskStatus.OPEN)
+                            })
+                        }
+                    }
+                }
+            }
+        }
+        // When and deadline, as under a to-do's title.
+        val facts = listOfNotNull(
+            project.startDate?.format(dateFormat),
+            project.deadline?.let { stringResource(R.string.deadline) + " " + it.format(dateFormat) },
+        )
+        if (facts.isNotEmpty()) {
+            Text(facts.joinToString("  ·  "), Modifier.padding(start = 44.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Every area, as in Things' sidebar: tap to open, swipe right to delete (after a confirmation). */
+@Composable
+private fun AreaList(library: ThingsLibrary, title: String, onOpen: (Area) -> Unit, onDelete: (Area) -> Unit) {
+    val areas = library.areas()
+    LazyColumn(Modifier.fillMaxSize()) {
+        item(key = "header") { ListHeader(ListKind.AREA, title) }
+        if (areas.isEmpty()) {
+            item(key = "empty") { Text(stringResource(R.string.nothing_here), Modifier.padding(20.dp)) }
+        }
+        items(areas, key = { it.id }) { area ->
+            SwipeActions(canReschedule = false, canTrash = true, onReschedule = {}, onTrash = { onDelete(area) }) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface)
+                        .clickable { onOpen(area) }
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ListIcon(ListKind.AREA, size = 20.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(area.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    val count = library.areaProjects(area.id).size + library.areaTasks(area.id).size
+                    if (count > 0) Text(count.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        item(key = "footer") { Spacer(Modifier.height(88.dp)) }
+    }
+}
+
+/** A project in a list: its circle, title and count of open to-dos. */
+@Composable
+private fun ProjectRow(library: ThingsLibrary, project: Task, onOpen: (Task) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { onOpen(project) }.padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ListIcon(ListKind.PROJECT, size = 20.dp)
+        Spacer(Modifier.width(12.dp))
+        Text(project.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        val open = library.projectTasks(project.id).size
+        if (open > 0) Text(open.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -777,6 +1352,7 @@ private fun TaskDetail(
     onSetDone: (String, Boolean) -> Unit,
     onChecklistDone: (String, Boolean) -> Unit,
     onAddChecklistItem: (String, String) -> Unit,
+    onDeleteChecklistItem: (String) -> Unit,
     onRestore: (String) -> Unit,
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -818,7 +1394,13 @@ private fun TaskDetail(
 
         Column(Modifier.padding(start = 12.dp, end = 12.dp)) {
             SelectionContainer {
-                Text(task.notes ?: stringResource(R.string.no_notes), style = MaterialTheme.typography.bodyLarge, color = if (task.notes == null) muted else Color.Unspecified)
+                val notes = task.notes
+                if (notes == null) {
+                    Text(stringResource(R.string.no_notes), style = MaterialTheme.typography.bodyLarge, color = muted)
+                } else {
+                    val colors = markdownColors()
+                    Text(remember(notes, colors) { markdown(notes, colors, clickableLinks = true) }, style = MaterialTheme.typography.bodyLarge)
+                }
             }
         }
 
@@ -839,7 +1421,13 @@ private fun TaskDetail(
                             style = MaterialTheme.typography.bodyMedium,
                             textDecoration = if (item.done) TextDecoration.LineThrough else null,
                             color = if (item.done) muted else Color.Unspecified,
+                            modifier = Modifier.weight(1f),
                         )
+                        if (editable) {
+                            IconButton(onClick = { onDeleteChecklistItem(item.id) }) {
+                                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.delete_item), Modifier.size(18.dp), tint = muted)
+                            }
+                        }
                     }
                 }
                 if (editable) {

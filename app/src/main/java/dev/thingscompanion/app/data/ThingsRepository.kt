@@ -46,10 +46,12 @@ class ThingsRepository(context: Context) {
     }
 
     /** The cached to-dos with the changes not sent yet; no network. */
-    suspend fun cached(): SyncOutcome? = withContext(Dispatchers.IO) {
-        val state = cache.load()?.first ?: return@withContext null
-        val pending = outbox.read()
-        SyncOutcome(PendingChanges.overlay(state, pending, now()), pending.size)
+    suspend fun cached(): SyncOutcome? = outboxLock.withLock {
+        withContext(Dispatchers.IO) {
+            if (!cache.exists()) return@withContext null
+            val pending = outbox.read()
+            SyncOutcome(show(pending, latest = null), pending.size)
+        }
     }
 
     /**
@@ -60,8 +62,7 @@ class ThingsRepository(context: Context) {
         withContext(Dispatchers.IO) {
             val pending = PendingChanges.enqueue(outbox.read(), change)
             outbox.write(pending)
-            val state = cache.load()?.first ?: HistoryState()
-            val library = PendingChanges.overlay(state, pending, now())
+            val library = show(pending, latest = change)
             writeWidgetSnapshot(appContext, WidgetSnapshot.from(library, dev.thingscompanion.cloud.ThingsDay.today(), System.currentTimeMillis()))
             scheduleReminders(library)
             SyncOutcome(library, pending.size)
@@ -98,6 +99,27 @@ class ThingsRepository(context: Context) {
 
     private fun now() = System.currentTimeMillis() / 1000.0
 
+    /**
+     * The lists with [pending] applied. Called under the outbox lock. When only [latest] is new
+     * since the last call and the cache has not changed, it is applied alone: a tap costs one
+     * rebuild of the lists, not a replay of the whole queue.
+     */
+    private fun show(pending: List<PendingChange>, latest: PendingChange?): ThingsLibrary {
+        // Read the version before the state: a sync saving in between only causes a full replay next time.
+        val version = FileHistoryCache.version
+        val last = shown
+        val next = if (last != null && last.cacheVersion == version && PendingChanges.canApplyAlone(last.pending, pending, latest)) {
+            PendingChanges.applyOne(last.shown, latest!!, now())
+        } else {
+            PendingChanges.overlayState(cache.load()?.first ?: HistoryState(), pending, now())
+        }
+        shown = Shown(version, pending, next)
+        return next.library
+    }
+
+    /** What [show] last built, from which cache version and queue. */
+    private class Shown(val cacheVersion: Long, val pending: List<PendingChange>, val shown: PendingChanges.Shown)
+
     /** Every sync refreshes the phone's own reminder alarms. */
     private fun scheduleReminders(library: ThingsLibrary) = ReminderScheduler.schedule(appContext, library)
 
@@ -111,6 +133,10 @@ class ThingsRepository(context: Context) {
 
         /** Guards the outbox file; never held across network calls, so queuing a change is instant. */
         val outboxLock = Mutex()
+
+        /** Shared by the app, the widget and the worker, which all run in the app's process. */
+        @Volatile
+        private var shown: Shown? = null
     }
 
     /** Pulls block and ignore cancellation; skip the cache write if the caller was cancelled (e.g. signed out). */
@@ -120,28 +146,64 @@ class ThingsRepository(context: Context) {
     }
 }
 
+/**
+ * The history in app files, also kept in memory once read: parsing the whole history took most
+ * of the time of every tap. Callers get a copy, so they may change it freely.
+ */
 private class FileHistoryCache(context: Context) : HistoryCache {
     private val stateFile = File(context.filesDir, "history_state.json")
     private val indexFile = File(context.filesDir, "history_index")
     private val snapshotFile = widgetSnapshotFile(context)
 
+    fun exists(): Boolean = memory != null || (stateFile.exists() && indexFile.exists())
+
     /** Resume only when both the state and its index are readable. */
     override fun load(): Pair<HistoryState, Long>? {
-        val state = stateFile.readTextOrNull()?.let { runCatching { HistoryState.fromJson(it) }.getOrNull() }
+        memory?.let { (state, index) -> return HistoryState(state.objects) to index }
+        val versionRead = version
         val index = indexFile.readTextOrNull()?.toLongOrNull()
-        return if (state != null && index != null) state to index else null
+        val state = stateFile.readTextOrNull()?.let { runCatching { HistoryState.fromJson(it) }.getOrNull() }
+        if (state == null || index == null) return null
+        // A save or clear meanwhile may have paired another state with this index: keep it out of memory.
+        synchronized(FileHistoryCache) {
+            if (version == versionRead && memory == null) {
+                memory = HistoryState(state.objects) to index
+                version++
+            }
+        }
+        return HistoryState(state.objects) to index
     }
 
     override fun save(state: HistoryState, nextStartIndex: Long, snapshot: WidgetSnapshot) {
         stateFile.writeAtomically(state.toJson())
         indexFile.writeAtomically(nextStartIndex.toString())
         snapshotFile.writeAtomically(snapshot.toJson())
+        remember(state, nextStartIndex)
     }
 
     fun clear() {
         stateFile.delete()
         indexFile.delete()
         snapshotFile.delete()
+        synchronized(FileHistoryCache) {
+            memory = null
+            version++
+        }
+    }
+
+    private fun remember(state: HistoryState, index: Long) = synchronized(FileHistoryCache) {
+        memory = HistoryState(state.objects) to index
+        version++
+    }
+
+    companion object {
+        @Volatile
+        private var memory: Pair<HistoryState, Long>? = null
+
+        /** Changes each time the cached history does. */
+        @Volatile
+        var version = 0L
+            private set
     }
 
     private fun File.readTextOrNull(): String? = if (exists()) readText() else null

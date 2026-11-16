@@ -14,14 +14,17 @@ Things has no Android app. Tandem Task brings your lists, notes and reminders to
 
 ## Features
 
-- **Your lists**: Today (with This Evening), Inbox, Upcoming (grouped by day), Anytime, Someday, Projects (grouped by area) and Trash, with notes, checklists, tags, deadlines and repeat rules.
-- **Works offline, never waits**: adding, editing, checking off or moving a to-do shows at once. Changes are kept on the phone and sent in the background, even later when the network comes back.
-- **Swipe actions**: swipe left to reschedule (Today, This Evening, Tomorrow, a date, Anytime, Someday), swipe right to move to the Trash, with Undo.
-- **Add and edit to-dos**: title, notes, checklist items, when and reminder. Repeating to-dos stay protected the way Things expects.
+- **Your lists**: Today (with This Evening), Inbox, Upcoming (grouped by day), Anytime, Someday, Projects (grouped by area), Areas and Trash, with notes, checklists, tags, deadlines and repeat rules. Projects show their to-dos under their headings.
+- **Works offline, never waits**: every change shows at once. Changes are kept on the phone and sent in the background a few seconds after your last tap, or later when the network comes back.
+- **Swipe actions**: swipe a to-do left to reschedule (Today, This Evening, Tomorrow, a date, Anytime, Someday), swipe right to move it to the Trash, with Undo. Projects, headings and areas are deleted the same way.
+- **Drag to reorder**: long-press a to-do, a heading or a project and drag it, also into This Evening, under another heading or into another area.
+- **Add and edit to-dos**: title, notes, checklist items, when, reminder and deadline, and move them to the Inbox, a project, a heading or an area. Repeating to-dos stay protected the way Things expects.
+- **Projects and areas**: create projects (with when and deadline), headings and areas; rename, complete, cancel, reopen, move and delete them. Completing a project completes its open to-dos, as in Things.
+- **Markdown in notes**: bold, italic, strikethrough, code, headings, lists and links, styled while you read and while you type.
 - **Checklists**: check items from the to-do, add, rename or delete them.
 - **Trash**: move to-dos to the Trash and restore them.
 - **Reminders on Android**: reminders set on any device ring on your phone as notifications, on time.
-- **Home-screen widget**: any list or project, with a **+** to add a to-do. Light, dark or system theme, adjustable background opacity.
+- **Home-screen widget**: any list or project. Tap a circle to check a to-do off, or **+** to add one. Light, dark or system theme, adjustable background opacity.
 - **Filters**: by tag, project or area, and date. Show or hide to-dos completed today.
 - **Background sync** every 30 minutes and when you come back to the app, so the widget stays current.
 - A design in the spirit of Things. Light, dark or system theme. English and French.
@@ -37,6 +40,10 @@ See the [changelog](CHANGELOG.md) for what changed in each version.
 | Dark mode | Upcoming | New to-do |
 |:---:|:---:|:---:|
 | <img src="docs/screenshots/dark-today.png" width="260"> | <img src="docs/screenshots/dark-upcoming.png" width="260"> | <img src="docs/screenshots/dark-add.png" width="260"> |
+
+| Project with headings | Areas | Markdown in notes |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/light-project.png" width="260"> | <img src="docs/screenshots/light-areas.png" width="260"> | <img src="docs/screenshots/light-markdown.png" width="260"> |
 
 <p align="center"><img src="docs/screenshots/widget.png" alt="Home-screen widget" width="520"></p>
 

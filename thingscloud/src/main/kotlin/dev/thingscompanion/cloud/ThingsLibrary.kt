@@ -57,7 +57,10 @@ data class Task(
     val isRepeating get() = isRecurrenceTemplate || repeatType != null || recurrenceTemplateIds.isNotEmpty()
 }
 
-data class Area(val id: String, val title: String, val index: Int)
+/** A heading of a project and its to-dos; [heading] is null for the to-dos under no heading. */
+data class ProjectSection(val heading: Task?, val tasks: List<Task>)
+
+data class Area(val id: String, val title: String, val index: Int, internal val entity: String? = "Area3")
 
 data class Tag(val id: String, val title: String)
 
@@ -81,7 +84,7 @@ class ThingsLibrary private constructor(
 
     fun area(id: String): Area? = areas[id]
 
-    fun areas(): List<Area> = areas.values.sortedBy { it.index }
+    fun areas(): List<Area> = areas.values.sortedWith(compareBy<Area>({ it.index }, { it.id }))
 
     fun tagTitles(task: Task): List<String> = task.tagIds.mapNotNull { tags[it] }
 
@@ -95,7 +98,7 @@ class ThingsLibrary private constructor(
 
     /** Trashed to-dos, most recently changed first (Things' Trash). */
     fun trash(): List<Task> = tasks.values
-        .filter { it.trashed && it.isTodo && it.isCurrentEntity && it.title.isNotBlank() }
+        .filter { it.trashed && it.isCurrentEntity && it.title.isNotBlank() }
         .sortedByDescending { it.modifiedAt ?: 0.0 }
 
     /** How a repeating to-do repeats: its own rule for a template, its template's for an instance. */
@@ -105,37 +108,57 @@ class ThingsLibrary private constructor(
     }
 
     /** Same to-dos as check-off: moving a repeating template or an "after completion" repeat to the Trash is left to Things. */
-    fun canTrash(task: Task): Boolean = canComplete(task)
+    fun canTrash(task: Task): Boolean = canComplete(task) || canEditProject(task) || canTrashHeading(task)
 
-    fun canRestore(task: Task): Boolean = task.trashed && task.isTodo && task.isCurrentEntity
+    /** A heading of a project the app may change; it goes to the Trash with its to-dos. */
+    private fun canTrashHeading(task: Task): Boolean =
+        task.type == TaskType.HEADING && !task.trashed && task.isCurrentEntity &&
+            task.projectId?.let(tasks::get)?.let(::canEditProject) == true
+
+    fun canRestore(task: Task): Boolean = task.trashed && task.isCurrentEntity
 
     /** Checklist of plain to-dos and repeating instances; a template's checklist is left to Things. */
     fun canEditChecklist(task: Task): Boolean = task.isTodo && !task.trashed && !task.isRecurrenceTemplate && task.repeatType == null
 
     fun inbox(closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) { it.isTodo && it.start == StartList.INBOX && it.projectId == null && it.areaId == null }
-        .sortedBy { it.index }
+        .sortedWith(byIndex)
 
     fun today(today: LocalDate, closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) {
         it.isTodo && it.start != StartList.INBOX && it.startDate != null && !it.startDate.isAfter(today)
-    }.sortedWith(compareBy<Task>({ it.evening }, { it.todayIndex }, { it.index }))
+    }.sortedWith(compareBy<Task>({ it.evening }, { it.todayIndex }, { it.index }, { it.id }))
 
     fun upcoming(today: LocalDate, closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) {
         it.type != TaskType.HEADING && !it.isRecurrenceTemplate && it.startDate != null && it.startDate.isAfter(today)
-    }.sortedWith(compareBy<Task>({ it.startDate }, { it.index }))
+    }.sortedWith(compareBy<Task>({ it.startDate }, { it.index }, { it.id }))
 
     fun anytime(today: LocalDate, closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) {
         it.isTodo && it.start == StartList.ANYTIME &&
             (it.startDate == null || !it.startDate.isAfter(today)) &&
             projectVisibleInAnytime(it.projectId, today)
-    }.sortedBy { it.index }
+    }.sortedWith(byIndex)
 
     fun someday(closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) {
         it.type != TaskType.HEADING && it.start == StartList.SOMEDAY && it.startDate == null &&
             !it.isRecurrenceTemplate && (it.type == TaskType.PROJECT || it.projectId == null)
-    }.sortedBy { it.index }
+    }.sortedWith(byIndex)
 
     /** Index that puts a new to-do on top of the Inbox: lowest open Inbox index minus 1, or 0 if empty. */
     fun nextInboxTopIndex(): Int = nextTopIndex(StartList.INBOX)
+
+    /** The index after the last of [siblings]: where Things puts a new project, heading or area. */
+    private fun bottomIndex(siblings: List<Int>) = (siblings.maxOrNull() ?: -1) + 1
+
+    fun nextProjectIndex(areaId: String?): Int =
+        bottomIndex(tasks.values.filter { it.type == TaskType.PROJECT && it.areaId == areaId && !it.trashed }.map { it.index })
+
+    /** After the project's to-dos and headings. */
+    fun nextIndexInProject(projectId: String): Int =
+        bottomIndex(tasks.values.filter { it.projectId == projectId && it.type != TaskType.PROJECT && !it.trashed }.map { it.index })
+
+    fun nextIndexInArea(areaId: String): Int =
+        bottomIndex(tasks.values.filter { it.isTodo && it.areaId == areaId && it.projectId == null && !it.trashed }.map { it.index })
+
+    fun nextAreaIndex(): Int = bottomIndex(areas.values.map { it.index })
 
     /** Same rule for unfiled to-dos of any start list (Anytime for Today/Evening, Someday for a later date). */
     fun nextTopIndex(start: StartList): Int = tasks.values
@@ -155,6 +178,29 @@ class ThingsLibrary private constructor(
         return template.repeatType == 0
     }
 
+    /** Projects the app may complete, cancel, reopen, date or edit: not repeating ones. */
+    fun canEditProject(task: Task): Boolean =
+        task.type == TaskType.PROJECT && !task.trashed && !task.isRepeating && task.isCurrentEntity
+
+    /**
+     * What completing or cancelling [project] also closes, as Things does: its open headings and
+     * open to-dos (directly or under a heading), except repeats the app can't check.
+     */
+    fun openChildren(project: Task): List<Task> = tasks.values.filter {
+        it.projectId == project.id && it.isOpen && !it.trashed && it.isCurrentEntity &&
+            (it.type == TaskType.HEADING || (it.isTodo && canComplete(it)))
+    }
+
+    /** To-dos the app may file elsewhere: not repeating templates, not trashed. */
+    fun canMove(task: Task): Boolean =
+        task.isTodo && !task.trashed && !task.isRecurrenceTemplate && task.repeatType == null && task.isCurrentEntity
+
+    /** To-dos, projects and headings the app may reorder. */
+    fun canReorder(task: Task): Boolean = !task.trashed && task.isCurrentEntity && !task.isRecurrenceTemplate
+
+    /** Whether the deadline of this to-do or project can be set from the app. */
+    fun canSetDeadline(task: Task): Boolean = (task.isTodo && canReschedule(task)) || canEditProject(task)
+
     /** When and reminder of repeating to-dos stay as Things manages them. */
     fun canReschedule(task: Task): Boolean = task.type == TaskType.TODO && !task.trashed && !task.isRepeating
 
@@ -162,12 +208,35 @@ class ThingsLibrary private constructor(
     fun withReminders(): List<Task> = visible { it.isTodo && it.startDate != null && it.reminder != null }
 
     fun projects(): List<Task> = visible { it.type == TaskType.PROJECT && !it.isRecurrenceTemplate }
-        .sortedBy { it.index }
+        .sortedWith(byIndex)
 
     fun projectTasks(projectId: String, closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) { it.isTodo && it.projectId == projectId }
-        .sortedBy { it.index }
+        .sortedWith(byIndex)
+
+    /** An area's open projects, in Things' order. */
+    fun areaProjects(areaId: String): List<Task> = projects().filter { it.areaId == areaId }
+
+    /** To-dos filed in the area itself, outside any project. */
+    fun areaTasks(areaId: String, closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> =
+        visible(closedOn, zone) { it.isTodo && it.areaId == areaId && it.projectId == null }.sortedWith(byIndex)
+
+    /**
+     * A project's to-dos as Things shows them: those under no heading first, then each open
+     * heading (empty ones too) with its to-dos. A to-do whose heading is archived or trashed
+     * falls back to the first section.
+     */
+    fun projectSections(projectId: String, closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<ProjectSection> {
+        val headings = visible { it.type == TaskType.HEADING && it.projectId == projectId }.sortedWith(byIndex)
+        val byHeading = projectTasks(projectId, closedOn, zone).groupBy { task -> task.headingId?.takeIf { id -> headings.any { it.id == id } } }
+        val loose = ProjectSection(null, byHeading[null].orEmpty())
+        return listOfNotNull(loose.takeIf { it.tasks.isNotEmpty() || headings.isEmpty() }) +
+            headings.map { ProjectSection(it, byHeading[it.id].orEmpty()) }
+    }
 
     private val Task.isTodo get() = type == TaskType.TODO
+
+    /** Things' order within a list, ties broken by id so a refresh never swaps rows. */
+    private val byIndex = compareBy<Task>({ it.index }, { it.id })
 
     /** Task6 and later (Task7 seen in 2026 accounts); Task3/Task4 are legacy rows the app no longer shows. */
     private val Task.isCurrentEntity
@@ -184,7 +253,17 @@ class ThingsLibrary private constructor(
         predicate: (Task) -> Boolean,
     ): List<Task> = tasks.values.filter {
         val shown = it.isOpen || (closedOn != null && it.stopDate?.atZone(zone)?.toLocalDate() == closedOn)
-        shown && !it.trashed && it.isCurrentEntity && it.title.isNotBlank() && predicate(it)
+        shown && !it.trashed && !it.inTrashedContainer && it.isCurrentEntity && it.title.isNotBlank() && predicate(it)
+    }
+
+    /** A to-do or heading of a project (or heading) in the Trash: hidden with it, as in Things. */
+    private val Task.inTrashedContainer
+        get() = projectId?.let(tasks::get)?.trashed == true || headingId?.let(tasks::get)?.trashed == true
+
+    /** What deleting an area moves to the Trash: its projects and its own to-dos, not already there. */
+    fun areaContents(areaId: String): List<Task> = tasks.values.filter {
+        !it.trashed && it.isCurrentEntity && it.areaId == areaId &&
+            ((it.type == TaskType.PROJECT) || (it.isTodo && it.projectId == null))
     }
 
     private fun projectVisibleInAnytime(projectId: String?, today: LocalDate): Boolean {
@@ -206,11 +285,13 @@ class ThingsLibrary private constructor(
             fun directProject(id: String?) = id?.let { rawTasks[it]?.props }?.let { firstId(it, "pr") }
             fun directArea(id: String?) = id?.let { rawTasks[it]?.props }?.let { firstId(it, "ar") }
 
+            // A project or to-do may still name an area deleted since: it then has none.
+            val areaIds = raw.filterValues { it.entity?.startsWith("Area") == true }.keys
             val tasks = rawTasks.mapValues { (id, obj) ->
                 val p = obj.props
                 val heading = firstId(p, "agr")
                 val project = firstId(p, "pr") ?: directProject(heading)
-                val area = firstId(p, "ar") ?: directArea(project) ?: directArea(heading)
+                val area = (firstId(p, "ar") ?: directArea(project) ?: directArea(heading))?.takeIf { it in areaIds }
                 Task(
                     id = id,
                     title = p["tt"].stringOrNull().orEmpty(),
@@ -242,7 +323,7 @@ class ThingsLibrary private constructor(
             }
 
             val areas = raw.filterValues { it.entity?.startsWith("Area") == true }.mapValues { (id, obj) ->
-                Area(id, obj.props["tt"].stringOrNull().orEmpty(), obj.props.int("ix") ?: 0)
+                Area(id, obj.props["tt"].stringOrNull().orEmpty(), obj.props.int("ix") ?: 0, obj.entity)
             }
             val tags = raw.filterValues { it.entity?.startsWith("Tag") == true }
                 .mapValues { (_, obj) -> obj.props["tt"].stringOrNull().orEmpty() }
