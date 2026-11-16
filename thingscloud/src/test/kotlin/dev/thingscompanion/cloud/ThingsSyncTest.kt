@@ -129,4 +129,17 @@ class ThingsSyncTest {
 
         assertNull(cache.saved)
     }
+
+    @Test
+    fun `the widget snapshot already shows changes not sent yet`() {
+        val client = ThingsCloudClient(baseUrl = server.url("/version/1").toString(), appInstanceId = "i")
+        val pending = listOf(PendingChange.AddTask("o", "queued", "Offline idea", "", PendingChange.When.of(Schedule.Inbox)))
+        val withQueue = ThingsSync(client, cache, now = { 1_794_700_000.0 }, today = { LocalDate.of(2026, 11, 15) }, pending = { pending })
+        server.enqueue(page(created("a", "First"), head = 10))
+
+        val result = withQueue.sync("hk")
+
+        assertNull(result.library.task("queued"))
+        assertEquals(setOf("a", "queued"), cache.snapshot!!.items("inbox").map { it.id }.toSet())
+    }
 }

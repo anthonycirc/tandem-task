@@ -1,5 +1,6 @@
 package dev.thingscompanion.cloud
 
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -47,9 +48,61 @@ object TaskEdits {
         return if (changes.isEmpty()) null else update(task, changes, now)
     }
 
-    private fun update(task: Task, changes: Map<String, JsonElement>, now: Double) = buildJsonObject {
+    /** Moves a to-do to the Trash, or back (`tr`). */
+    fun setTrashed(task: Task, trashed: Boolean, now: Double): JsonObject =
+        update(task.entity, mapOf("tr" to JsonPrimitive(trashed)), now)
+
+    /** A new checklist item, shaped like the ones the Things app writes. */
+    fun newChecklistItem(taskId: String, title: String, index: Int, now: Double): JsonObject {
+        val trimmed = title.trim()
+        require(trimmed.isNotEmpty()) { "The title is empty." }
+        return buildJsonObject {
+            put("t", 0)
+            put("e", "ChecklistItem3")
+            put("p", buildJsonObject {
+                put("tt", trimmed)
+                put("ts", JsonArray(listOf(JsonPrimitive(taskId))))
+                put("ix", index)
+                put("ss", 0)
+                put("sp", JsonNull)
+                put("cd", now.toLong())
+                put("md", JsonNull)
+                put("lt", true)
+                put("xx", buildJsonObject {
+                    put("_t", "oo")
+                    put("sn", JsonObject(emptyMap()))
+                })
+            })
+        }
+    }
+
+    fun checkChecklistItem(item: ChecklistItem, done: Boolean, now: Double): JsonObject = update(
+        item.entity,
+        mapOf(
+            "ss" to JsonPrimitive(if (done) 3 else 0),
+            "sp" to if (done) InboxTask.plainNumber(now) else JsonNull,
+        ),
+        now,
+    )
+
+    fun renameChecklistItem(item: ChecklistItem, title: String, now: Double): JsonObject? {
+        val trimmed = title.trim()
+        require(trimmed.isNotEmpty()) { "The title is empty." }
+        return if (trimmed == item.title) null else update(item.entity, mapOf("tt" to JsonPrimitive(trimmed)), now)
+    }
+
+    /** Deletes an object outright (`t:2`), as things3-cloud does. */
+    fun delete(entity: String?): JsonObject = buildJsonObject {
+        put("t", 2)
+        put("e", entity)
+        put("p", JsonObject(emptyMap()))
+    }
+
+    private fun update(task: Task, changes: Map<String, JsonElement>, now: Double) = update(task.entity, changes, now)
+
+    private fun update(entity: String?, changes: Map<String, JsonElement>, now: Double) = buildJsonObject {
         put("t", 1)
-        put("e", task.entity)
+        put("e", entity)
         put("p", buildJsonObject {
             changes.forEach { (key, value) -> put(key, value) }
             put("md", InboxTask.plainNumber(now))

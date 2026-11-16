@@ -42,6 +42,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Back in the app: send what waits and pull, in the background. */
+    override fun onRestart() {
+        super.onRestart()
+        viewModel.refresh()
+    }
+
+    /** Leaving the app: changes still queued are handed to WorkManager. */
+    override fun onStop() {
+        super.onStop()
+        viewModel.onAppStopped()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleLaunch(intent)

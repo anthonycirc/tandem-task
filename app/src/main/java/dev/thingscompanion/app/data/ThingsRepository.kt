@@ -4,7 +4,8 @@ import android.content.Context
 import dev.thingscompanion.app.reminders.ReminderScheduler
 import dev.thingscompanion.cloud.HistoryCache
 import dev.thingscompanion.cloud.HistoryState
-import dev.thingscompanion.cloud.Schedule
+import dev.thingscompanion.cloud.PendingChange
+import dev.thingscompanion.cloud.PendingChanges
 import dev.thingscompanion.cloud.ThingsCloudClient
 import dev.thingscompanion.cloud.ThingsLibrary
 import dev.thingscompanion.cloud.ThingsSync
@@ -16,9 +17,15 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.time.LocalTime
 
 class NotSignedInException : Exception("Not signed in")
+
+/** The to-dos to show (cache plus changes not sent yet), how many changes wait, and those that could not apply. */
+class SyncOutcome(
+    val library: ThingsLibrary,
+    val pending: Int,
+    val failed: List<Pair<PendingChange, Exception>> = emptyList(),
+)
 
 /** Android adapter: credentials in the Keystore, history cached in app files, use cases in [ThingsSync]. */
 class ThingsRepository(context: Context) {
@@ -26,7 +33,8 @@ class ThingsRepository(context: Context) {
     private val secureStore = SecureStore(context)
     private val cache = FileHistoryCache(context)
     private val client = ThingsCloudClient(appInstanceId = secureStore.appInstanceId)
-    private val sync = ThingsSync(client, cache)
+    private val outbox = Outbox(context)
+    private val sync = ThingsSync(client, cache, pending = outbox::read)
 
     val isSignedIn: Boolean get() = secureStore.historyKey() != null
 
@@ -37,37 +45,58 @@ class ThingsRepository(context: Context) {
         sync.sync(historyKey, abortIfCancelled()).library.also(::scheduleReminders)
     }
 
-    suspend fun cached(): ThingsLibrary? = withContext(Dispatchers.IO) {
-        cache.load()?.first?.let(ThingsLibrary::from)
+    /** The cached to-dos with the changes not sent yet; no network. */
+    suspend fun cached(): SyncOutcome? = withContext(Dispatchers.IO) {
+        val state = cache.load()?.first ?: return@withContext null
+        val pending = outbox.read()
+        SyncOutcome(PendingChanges.overlay(state, pending, now()), pending.size)
     }
 
-    suspend fun refresh(): ThingsLibrary = locked {
-        sync.sync(historyKey(), abortIfCancelled()).library.also(::scheduleReminders)
+    /**
+     * Keeps [change] on the phone and returns the to-dos as they will be once it is sent.
+     * Takes the outbox lock before switching threads, so changes keep the order they were made in.
+     */
+    suspend fun enqueue(change: PendingChange): SyncOutcome = outboxLock.withLock {
+        withContext(Dispatchers.IO) {
+            val pending = PendingChanges.enqueue(outbox.read(), change)
+            outbox.write(pending)
+            val state = cache.load()?.first ?: HistoryState()
+            val library = PendingChanges.overlay(state, pending, now())
+            writeWidgetSnapshot(appContext, WidgetSnapshot.from(library, dev.thingscompanion.cloud.ThingsDay.today(), System.currentTimeMillis()))
+            scheduleReminders(library)
+            SyncOutcome(library, pending.size)
+        }
     }
 
-    suspend fun addTask(id: String, title: String, notes: String, schedule: Schedule, reminder: LocalTime?): ThingsLibrary = locked {
-        sync.addInboxTask(historyKey(), id, title, notes, abortIfCancelled(), schedule, reminder).also(::scheduleReminders)
+    /** Sends the queued changes, then pulls; the cache and the widget are refreshed either way. */
+    suspend fun sync(): SyncOutcome = locked {
+        val pending = outbox.read()
+        val result = sync.flush(historyKey(), pending, abortIfCancelled())
+        // Changes queued meanwhile stay; only those settled by this flush leave the queue.
+        val settled = (result.done + result.failed.map { it.first.opId }).toSet()
+        val remaining = outboxLock.withLock { outbox.read().filterNot { it.opId in settled }.also(outbox::write) }
+        val library = PendingChanges.overlay(result.synced.state, remaining, now())
+        scheduleReminders(library)
+        SyncOutcome(library, remaining.size, result.failed)
     }
 
-    suspend fun completeTask(id: String, done: Boolean): ThingsLibrary = locked {
-        sync.completeTask(historyKey(), id, done, abortIfCancelled()).also(::scheduleReminders)
-    }
+    suspend fun pendingCount(): Int = withContext(Dispatchers.IO) { outbox.read().size }
 
-    suspend fun editTask(id: String, title: String, notes: String, schedule: Schedule, reminder: LocalTime?): ThingsLibrary = locked {
-        sync.editTask(historyKey(), id, title, notes, schedule, reminder, abortIfCancelled()).also(::scheduleReminders)
-    }
-
-    /** Whether an earlier attempt for this draft id reached Things. */
-    suspend fun landed(id: String): Boolean = locked {
-        sync.landed(historyKey(), id, abortIfCancelled())
+    /** Drops the changes not sent yet (a change Things keeps refusing would otherwise block the queue). */
+    suspend fun discardPending(): SyncOutcome? {
+        outboxLock.withLock { withContext(Dispatchers.IO) { outbox.write(emptyList()) } }
+        return cached()
     }
 
     /** Under the sync lock, so no sync (UI or worker) can write the cache back after it is cleared. */
     suspend fun signOut() = locked {
         secureStore.clear()
         cache.clear()
+        outboxLock.withLock { outbox.write(emptyList()) }
         ReminderScheduler.cancelAll(appContext)
     }
+
+    private fun now() = System.currentTimeMillis() / 1000.0
 
     /** Every sync refreshes the phone's own reminder alarms. */
     private fun scheduleReminders(library: ThingsLibrary) = ReminderScheduler.schedule(appContext, library)
@@ -79,6 +108,9 @@ class ThingsRepository(context: Context) {
 
     private companion object {
         val syncLock = Mutex()
+
+        /** Guards the outbox file; never held across network calls, so queuing a change is instant. */
+        val outboxLock = Mutex()
     }
 
     /** Pulls block and ignore cancellation; skip the cache write if the caller was cancelled (e.g. signed out). */
@@ -125,6 +157,33 @@ private class FileHistoryCache(context: Context) : HistoryCache {
     }
 }
 
+/** Changes made on the phone and not yet in Things Cloud, in the order they were made. */
+private class Outbox(context: Context) {
+    private val file = File(context.filesDir, "pending_changes.json")
+
+    /** An unreadable file is kept aside rather than silently emptied. */
+    fun read(): List<PendingChange> {
+        if (!file.exists()) return emptyList()
+        return runCatching { PendingChanges.fromJson(file.readText()) }.getOrElse {
+            file.renameTo(File(file.parentFile, "${file.name}.unreadable"))
+            emptyList()
+        }
+    }
+
+    fun write(changes: List<PendingChange>) {
+        if (changes.isEmpty()) {
+            file.delete()
+            return
+        }
+        val tmp = File(file.parentFile, "${file.name}.tmp")
+        tmp.writeText(PendingChanges.toJson(changes))
+        if (!tmp.renameTo(file)) {
+            tmp.delete()
+            file.writeText(PendingChanges.toJson(changes))
+        }
+    }
+}
+
 /** The lists the home-screen widget shows, refreshed after every sync. */
 fun widgetSnapshotFile(context: Context) = File(context.filesDir, "widget_snapshot.json")
 
@@ -134,5 +193,11 @@ fun readWidgetSnapshot(context: Context): WidgetSnapshot? = widgetSnapshotFile(c
 
 /** Writes a snapshot for the widget outside a sync (demo mode). */
 fun writeWidgetSnapshot(context: Context, snapshot: WidgetSnapshot) {
-    widgetSnapshotFile(context).writeText(snapshot.toJson())
+    val file = widgetSnapshotFile(context)
+    val tmp = File(file.parentFile, "${file.name}.tmp2")
+    tmp.writeText(snapshot.toJson())
+    if (!tmp.renameTo(file)) {
+        tmp.delete()
+        file.writeText(snapshot.toJson())
+    }
 }

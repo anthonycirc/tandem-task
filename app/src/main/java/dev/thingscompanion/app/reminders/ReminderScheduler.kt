@@ -128,7 +128,7 @@ class RescheduleReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                ThingsRepository(context.applicationContext).cached()?.let { ReminderScheduler.schedule(context, it) }
+                ThingsRepository(context.applicationContext).cached()?.let { ReminderScheduler.schedule(context, it.library) }
             } finally {
                 pending.finish()
             }

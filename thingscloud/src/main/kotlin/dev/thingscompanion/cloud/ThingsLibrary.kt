@@ -46,6 +46,10 @@ data class Task(
     val recurrenceTemplateIds: List<String> = emptyList(),
     /** For a template: the repeat type (`rr.tp`): 0 fixed schedule, 1 after completion. */
     val repeatType: Int? = null,
+    /** For a template: its repeat rule as stored (`rr`). */
+    internal val repeatRuleJson: JsonObject? = null,
+    /** Last change (`md`), epoch seconds. */
+    val modifiedAt: Double? = null,
     internal val entity: String?,
 ) {
     val isOpen get() = status == TaskStatus.OPEN
@@ -57,7 +61,14 @@ data class Area(val id: String, val title: String, val index: Int)
 
 data class Tag(val id: String, val title: String)
 
-data class ChecklistItem(val id: String, val title: String, val done: Boolean, val index: Int)
+data class ChecklistItem(
+    val id: String,
+    val title: String,
+    val done: Boolean,
+    val index: Int,
+    val taskId: String = "",
+    internal val entity: String? = null,
+)
 
 /** Read-only view of a Things database, with the app's list rules. */
 class ThingsLibrary private constructor(
@@ -77,6 +88,29 @@ class ThingsLibrary private constructor(
     fun tags(): List<Tag> = tags.map { (id, title) -> Tag(id, title) }.sortedBy { it.title.lowercase() }
 
     fun checklist(taskId: String): List<ChecklistItem> = checklists[taskId].orEmpty()
+
+    fun checklistItem(id: String): ChecklistItem? = checklistItems[id]
+
+    private val checklistItems by lazy { checklists.values.flatten().associateBy { it.id } }
+
+    /** Trashed to-dos, most recently changed first (Things' Trash). */
+    fun trash(): List<Task> = tasks.values
+        .filter { it.trashed && it.isTodo && it.isCurrentEntity && it.title.isNotBlank() }
+        .sortedByDescending { it.modifiedAt ?: 0.0 }
+
+    /** How a repeating to-do repeats: its own rule for a template, its template's for an instance. */
+    fun repeatRule(task: Task): RepeatRule? {
+        val template = if (task.repeatRuleJson != null) task else task.recurrenceTemplateIds.singleOrNull()?.let(tasks::get)
+        return template?.repeatRuleJson?.let(RepeatRule::parse)
+    }
+
+    /** Same to-dos as check-off: moving a repeating template or an "after completion" repeat to the Trash is left to Things. */
+    fun canTrash(task: Task): Boolean = canComplete(task)
+
+    fun canRestore(task: Task): Boolean = task.trashed && task.isTodo && task.isCurrentEntity
+
+    /** Checklist of plain to-dos and repeating instances; a template's checklist is left to Things. */
+    fun canEditChecklist(task: Task): Boolean = task.isTodo && !task.trashed && !task.isRecurrenceTemplate && task.repeatType == null
 
     fun inbox(closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) { it.isTodo && it.start == StartList.INBOX && it.projectId == null && it.areaId == null }
         .sortedBy { it.index }
@@ -201,6 +235,8 @@ class ThingsLibrary private constructor(
                     stopDate = p["sp"].primitiveOrNull()?.doubleOrNull?.let { Instant.ofEpochMilli((it * 1000).toLong()) },
                     recurrenceTemplateIds = (p["rt"] as? JsonArray)?.mapNotNull { it.stringOrNull() }.orEmpty(),
                     repeatType = (p["rr"] as? JsonObject)?.let { it.int("tp") ?: -1 },
+                    repeatRuleJson = p["rr"] as? JsonObject,
+                    modifiedAt = p["md"].primitiveOrNull()?.doubleOrNull,
                     entity = obj.entity,
                 )
             }
@@ -218,6 +254,8 @@ class ThingsLibrary private constructor(
                         title = obj.props["tt"].stringOrNull().orEmpty(),
                         done = obj.props.int("ss") == 3,
                         index = obj.props.int("ix") ?: 0,
+                        taskId = owner,
+                        entity = obj.entity,
                     )
                 }
                 .groupBy({ it.first }, { it.second })

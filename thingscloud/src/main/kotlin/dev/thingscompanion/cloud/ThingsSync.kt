@@ -25,8 +25,15 @@ class ThingsSync(
     private val cache: HistoryCache,
     private val now: () -> Double = { System.currentTimeMillis() / 1000.0 },
     private val today: () -> LocalDate = { ThingsDay.today() },
+    /** Changes not sent yet: the widget snapshot already shows them. */
+    private val pending: () -> List<PendingChange> = { emptyList() },
 ) {
-    class Synced(val library: ThingsLibrary, val headIndex: Long)
+    class Synced(val library: ThingsLibrary, val headIndex: Long, val state: HistoryState)
+
+    /** [done]: changes Things now shows (by [PendingChange.opId]); [failed]: changes that can't apply, with why. */
+    class Flushed(val synced: Synced, val done: List<String>, val failed: List<Pair<PendingChange, Exception>>) {
+        val library get() = synced.library
+    }
 
     /**
      * Pulls new history items on top of the cache and saves the result.
@@ -37,8 +44,9 @@ class ThingsSync(
         val pulled = client.pullWithHead(historyKey, state, startIndex)
         beforeSave()
         val library = ThingsLibrary.from(state)
-        cache.save(state, pulled.nextStartIndex, WidgetSnapshot.from(library, today(), (now() * 1000).toLong()))
-        return Synced(library, pulled.headIndex)
+        val shown = pending().let { if (it.isEmpty()) library else PendingChanges.overlay(state, it, now()) }
+        cache.save(state, pulled.nextStartIndex, WidgetSnapshot.from(shown, today(), (now() * 1000).toLong()))
+        return Synced(library, pulled.headIndex, state)
     }
 
     /**
@@ -118,6 +126,39 @@ class ThingsSync(
         val updated = after.library.task(id) ?: throw TaskNotConfirmedException()
         if (runCatching { build(after.library, updated) }.getOrNull() != null) throw TaskNotConfirmedException()
         return after.library
+    }
+
+    /**
+     * Sends queued changes in order. Each is rebuilt against a fresh pull and committed against
+     * the server head; nothing is sent for a change Things already shows. A change counts as done
+     * once the pull right after its own commit shows it. Network and server errors stop the flush (the remaining
+     * changes stay queued); a change that can no longer apply is reported in [Flushed.failed].
+     */
+    fun flush(historyKey: String, changes: List<PendingChange>, beforeSave: () -> Unit = {}): Flushed {
+        val done = mutableListOf<String>()
+        val failed = mutableListOf<Pair<PendingChange, Exception>>()
+        var current = sync(historyKey, beforeSave)
+        for (change in changes) {
+            val payload = try {
+                change.build(current.library, now())
+            } catch (e: IllegalArgumentException) {
+                failed += change to e
+                continue
+            } catch (e: NoSuchElementException) {
+                failed += change to e
+                continue
+            }
+            if (payload == null) {
+                done += change.opId
+                continue
+            }
+            client.commit(historyKey, current.headIndex, payload)
+            // Also the pull before the next commit, so each one is made against the server head.
+            current = sync(historyKey, beforeSave)
+            // Confirmed here, before a later change can undo it: otherwise it would look unsent and go out again.
+            if (runCatching { change.build(current.library, now()) }.getOrNull() == null) done += change.opId
+        }
+        return Flushed(current, done, failed)
     }
 
     /** Whether the to-do [id] exists after a fresh pull. */

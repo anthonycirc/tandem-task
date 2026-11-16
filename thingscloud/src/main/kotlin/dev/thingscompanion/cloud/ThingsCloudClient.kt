@@ -23,7 +23,7 @@ data class PullResult(
 /**
  * Client for the unofficial Things Cloud API.
  * Protocol ported from things3-cloud (MIT), see THIRD_PARTY_NOTICES.md.
- * The only write is creating an Inbox to-do ([commitInboxTask]).
+ * Writes go through [commit]: one history item holding changes to one or more objects.
  */
 class ThingsCloudClient(
     private val baseUrl: String = DEFAULT_BASE_URL,
@@ -82,8 +82,12 @@ class ThingsCloudClient(
      * Committing the same [id] again replaces the same object, so a retry cannot duplicate it.
      * Returns the new server head index.
      */
-    fun commitInboxTask(historyKey: String, ancestorIndex: Long, id: String, payload: JsonObject): Long {
-        val body = JsonObject(mapOf(id to payload))
+    fun commitInboxTask(historyKey: String, ancestorIndex: Long, id: String, payload: JsonObject): Long =
+        commit(historyKey, ancestorIndex, mapOf(id to payload))
+
+    /** Commits changes to several objects in one history item; returns the new server head index. */
+    fun commit(historyKey: String, ancestorIndex: Long, changes: Map<String, JsonObject>): Long {
+        val body = JsonObject(changes)
         val result = send(
             "$baseUrl/history/${percentEncode(historyKey)}/commit?ancestor-index=$ancestorIndex&_cnt=1",
             "commit",

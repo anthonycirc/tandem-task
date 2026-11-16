@@ -39,6 +39,7 @@ object DemoData {
             deadline: LocalDate? = null,
             completed: Boolean = false,
             type: Int = 0,
+            extra: Map<String, JsonElement> = emptyMap(),
         ) {
             val base = (InboxTask.payload(title, notes, index, nowSeconds, schedule, reminder)["p"] as JsonObject).toMutableMap()
             base["tp"] = JsonPrimitive(type)
@@ -46,6 +47,7 @@ object DemoData {
             base["ar"] = JsonArray(listOfNotNull(area).map(::JsonPrimitive))
             base["tg"] = JsonArray(tags.map(::JsonPrimitive))
             deadline?.let { base["dd"] = JsonPrimitive(it.toEpochDay() * 86_400) }
+            base.putAll(extra)
             if (completed) {
                 base["ss"] = JsonPrimitive(3)
                 base["sp"] = JsonPrimitive(nowSeconds - 1800)
@@ -88,6 +90,13 @@ object DemoData {
         todo("t-5", "Pick up the dry cleaning", Schedule.Today(today), 4, area = "area-home", tags = listOf("tag-errand"), completed = true)
         todo("t-6", "Read two chapters", Schedule.Evening(today), 5, area = "area-home", reminder = LocalTime.of(21, 0))
         todo("t-7", "Stretch for 15 minutes", Schedule.Evening(today), 6, tags = listOf("tag-home"))
+
+        // A to-do repeating every Monday and Thursday: its template, and today's instance.
+        val weekly = kotlinx.serialization.json.Json.parseToJsonElement(
+            """{"tp": 0, "fu": 256, "fa": 1, "of": [{"wd": 1}, {"wd": 4}], "ed": 64092211200, "rc": 0}""",
+        )
+        todo("r-tmpl", "Water the plants", Schedule.Anytime, 30, area = "area-home", extra = mapOf("rr" to weekly))
+        todo("t-8", "Water the plants", Schedule.Today(today), 7, area = "area-home", extra = mapOf("rt" to JsonArray(listOf(JsonPrimitive("r-tmpl")))))
 
         // Inbox
         todo("i-1", "Ideas for the team offsite", Schedule.Inbox, -3, notes = "Cooking class? Boat trip?")
