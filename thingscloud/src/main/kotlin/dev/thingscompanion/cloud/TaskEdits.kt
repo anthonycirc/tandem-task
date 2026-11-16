@@ -71,16 +71,24 @@ object TaskEdits {
         }
     }
 
-    /** The rules the app writes: by days or weeks, after completion (the only ones seen made by Things 3 lately). */
-    fun canWriteRule(rule: RepeatRule): Boolean =
-        rule.afterCompletion && (rule.unit == RepeatUnit.DAY || rule.unit == RepeatUnit.WEEK) &&
-            rule.every in 1..365 && rule.weekdays.isEmpty() && rule.endDate == null
+    /**
+     * The rules the app writes for a to-do on [start], by days or weeks with no end: after
+     * completion, or on a fixed schedule that [start] is part of (a weekly one on several days
+     * only every week, since which week Things counts from is unknown).
+     */
+    fun canWriteRule(rule: RepeatRule, start: LocalDate): Boolean {
+        if ((rule.unit != RepeatUnit.DAY && rule.unit != RepeatUnit.WEEK) || rule.every !in 1..365 || rule.endDate != null) return false
+        return if (rule.afterCompletion) rule.weekdays.isEmpty()
+        else (rule.unit == RepeatUnit.DAY && rule.weekdays.isEmpty()) ||
+            (start.dayOfWeek in rule.weekdays && rule.nextAfter(start) != null)
+    }
 
     /**
-     * What Things 3 writes when a dated to-do is made to repeat (pattern seen for R1-R4): a
+     * What Things 3 writes when a dated to-do is made to repeat (pattern seen for R1-R7): a
      * template copied from it, undated (`st` 2), first instance created (`icc` 1), next
-     * creation the day after (`icsd`), with copies of its checklist items; and on the to-do
-     * only `rt`, no `md`.
+     * creation the day after (`icsd`; on a fixed schedule the next occurrence, also its `tir`,
+     * and `ia` the to-do's day), with copies of its checklist items; and on the to-do only `rt`,
+     * no `md`.
      */
     fun makeRepeating(
         task: Task,
@@ -100,10 +108,12 @@ object TaskEdits {
         val props = (base["p"] as JsonObject).toMutableMap()
         props["ato"] = task.reminder?.let { JsonPrimitive(it.toSecondOfDay()) } ?: JsonNull
         props["tg"] = JsonArray(task.tagIds.map(::JsonPrimitive))
-        props["icsd"] = JsonPrimitive(start.plusDays(1).toEpochDay() * InboxTask.SECONDS_PER_DAY)
+        val next = rule.nextAfter(start)
+        props["icsd"] = JsonPrimitive((next ?: start.plusDays(1)).toEpochDay() * InboxTask.SECONDS_PER_DAY)
+        if (next != null) props["tir"] = JsonPrimitive(next.toEpochDay() * InboxTask.SECONDS_PER_DAY)
         props["icc"] = JsonPrimitive(1)
         props["ti"] = JsonPrimitive(task.todayIndex)
-        props["rr"] = rule.toRr(start, anchor = null)
+        props["rr"] = rule.toRr(start, anchor = start.takeIf { next != null })
         val template = buildJsonObject {
             put("t", 0)
             put("e", "Task7")

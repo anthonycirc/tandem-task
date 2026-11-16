@@ -164,6 +164,7 @@
     <string name="repeat_title">Répéter</string>
     <string name="repeat_unit_days">Jours</string>
     <string name="repeat_unit_weeks">Semaines</string>
-    <string name="repeat_app_limits">Commence le jour de la tâche. Les autres répétitions (jours fixes, mois, années) se règlent dans Things.</string>
+    <string name="repeat_app_limits">Commence le jour de la tâche. Les répétitions par mois ou par année se règlent dans Things.</string>
+    <string name="repeat_after_completion_toggle">Après achèvement</string>
     <string name="now_repeats">Répétition activée</string>
 </resources>

@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -316,13 +317,15 @@ sealed interface PendingChange {
         val every: Int,
         val afterCompletion: Boolean,
         val checklistIds: List<String>,
+        /** ISO day numbers (1 Monday .. 7 Sunday) of a fixed weekly rule. */
+        val weekdays: List<Int> = emptyList(),
     ) : PendingChange {
         override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
             val task = library.task(taskId) ?: throw NoSuchElementException("The to-do no longer exists.")
             if (templateId in task.recurrenceTemplateIds) return null
             require(library.canMakeRepeating(task)) { "This to-do can't be made to repeat from the app." }
-            val rule = RepeatRule(unit, every, afterCompletion)
-            require(TaskEdits.canWriteRule(rule)) { "This repeat can't be set from the app yet." }
+            val rule = RepeatRule(unit, every, afterCompletion, weekdays.map(DayOfWeek::of))
+            require(TaskEdits.canWriteRule(rule, task.startDate!!)) { "This repeat can't be set from the app yet." }
             val checklist = library.checklist(taskId)
             require(checklist.size <= checklistIds.size) { "The checklist changed; try again." }
             return TaskEdits.makeRepeating(task, checklist, templateId, checklistIds, rule, now)
@@ -330,7 +333,7 @@ sealed interface PendingChange {
 
         companion object {
             operator fun invoke(opId: String, taskId: String, templateId: String, rule: RepeatRule, checklistIds: List<String>) =
-                MakeRepeating(opId, taskId, templateId, rule.unit, rule.every, rule.afterCompletion, checklistIds)
+                MakeRepeating(opId, taskId, templateId, rule.unit, rule.every, rule.afterCompletion, checklistIds, rule.weekdays.map { it.value })
         }
     }
 

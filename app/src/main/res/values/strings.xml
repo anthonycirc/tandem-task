@@ -162,6 +162,7 @@
     <string name="repeat_title">Repeat</string>
     <string name="repeat_unit_days">Days</string>
     <string name="repeat_unit_weeks">Weeks</string>
-    <string name="repeat_app_limits">Starts on the to-do\'s day. Other repeats (fixed days, months, years) are set in Things.</string>
+    <string name="repeat_app_limits">Starts on the to-do\'s day. Monthly and yearly repeats are set in Things.</string>
+    <string name="repeat_after_completion_toggle">After completion</string>
     <string name="now_repeats">Now repeats</string>
 </resources>

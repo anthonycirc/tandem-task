@@ -42,6 +42,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import dev.thingscompanion.cloud.RepeatUnit
+import dev.thingscompanion.cloud.TaskEdits
 import dev.thingscompanion.cloud.RepeatRule
 import dev.thingscompanion.cloud.Area
 import androidx.compose.ui.draw.shadow
@@ -119,6 +120,7 @@ import dev.thingscompanion.cloud.TaskType
 import dev.thingscompanion.cloud.ThingsDay
 import dev.thingscompanion.cloud.ThingsLibrary
 import kotlinx.coroutines.delay
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -269,8 +271,10 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
         return
     }
     val repeating = repeatingId?.let { library?.task(it) }
-    if (repeating != null) {
+    val repeatStart = repeating?.startDate
+    if (repeating != null && repeatStart != null) {
         RepeatDialog(
+            start = repeatStart,
             onPick = { rule ->
                 repeatingId = null
                 viewModel.makeRepeating(repeating.id, rule)
@@ -749,15 +753,23 @@ private fun MoveDialog(library: ThingsLibrary, item: Task, onPick: (PendingChang
 }
 
 /**
- * How a to-do repeats, from the app: every N days or weeks, after completion (the rules whose
- * writes are known). The rule starts on the to-do's day; other rules are set in Things.
+ * How a to-do repeats, from the app: every N days or weeks, on a fixed schedule (weekly on
+ * chosen days) or after completion. The rule starts on the to-do's day, [start], which a weekly
+ * schedule always includes; months and years are set in Things.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RepeatDialog(onPick: (RepeatRule) -> Unit, onDismiss: () -> Unit) {
+private fun RepeatDialog(start: LocalDate, onPick: (RepeatRule) -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
+    val locale = context.resources.configuration.locales[0] ?: Locale.getDefault()
     var unit by rememberSaveable { mutableStateOf(RepeatUnit.DAY) }
     var every by rememberSaveable { mutableIntStateOf(1) }
-    val rule = RepeatRule(unit, every, afterCompletion = true)
+    var afterCompletion by rememberSaveable { mutableStateOf(false) }
+    var days by rememberSaveable { mutableStateOf(listOf(start.dayOfWeek.value)) }
+    val weekly = unit == RepeatUnit.WEEK && !afterCompletion
+    // Several days only every week: which week Things counts from is unknown.
+    val chosen = if (every > 1) listOf(start.dayOfWeek.value) else days
+    val rule = RepeatRule(unit, every, afterCompletion, weekdays = if (weekly) chosen.sorted().map(DayOfWeek::of) else emptyList())
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.repeat_title)) },
@@ -772,11 +784,30 @@ private fun RepeatDialog(onPick: (RepeatRule) -> Unit, onDismiss: () -> Unit) {
                     Text(every.toString(), style = MaterialTheme.typography.titleMedium)
                     TextButton(onClick = { if (every < 30) every++ }) { Text("+") }
                 }
+                if (weekly) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        DayOfWeek.entries.forEach { day ->
+                            val isStart = day == start.dayOfWeek
+                            FilterChip(
+                                selected = day.value in chosen,
+                                onClick = { days = if (day.value in days) days - day.value else days + day.value },
+                                enabled = !isStart && every == 1,
+                                label = { Text(day.getDisplayName(TextStyle.SHORT, locale)) },
+                            )
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.repeat_after_completion_toggle), modifier = Modifier.weight(1f))
+                    Switch(checked = afterCompletion, onCheckedChange = { afterCompletion = it })
+                }
                 Text(describeRepeat(context, rule), style = MaterialTheme.typography.bodyMedium)
                 Text(stringResource(R.string.repeat_app_limits), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
-        confirmButton = { TextButton(onClick = { onPick(rule) }) { Text(stringResource(R.string.save)) } },
+        confirmButton = {
+            TextButton(onClick = { onPick(rule) }, enabled = TaskEdits.canWriteRule(rule, start)) { Text(stringResource(R.string.save)) }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }

@@ -2,6 +2,12 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.3] - 2026-11-16
+
+### Added
+
+- **Fixed-schedule repeats.** The repeat button now also sets "every N days" or "every week on Monday and Thursday" on a fixed schedule, not only after completion, written as Things 3 writes it. A weekly schedule always includes the to-do's day; several days are offered for every week only.
+
 ## [0.3.2] - 2026-11-16
 
 ### Added

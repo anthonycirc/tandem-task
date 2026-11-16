@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
+import java.time.DayOfWeek
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -83,11 +84,56 @@ class MakeRepeatTest {
     }
 
     @Test
-    fun `undated to-dos, to-dos with a deadline, fixed schedules and months stay with Things`() {
+    fun `undated to-dos, to-dos with a deadline, and months stay with Things`() {
         assertFailsWith<IllegalArgumentException> { make("undated") }
         assertFailsWith<IllegalArgumentException> { make("deadline") }
-        assertFailsWith<IllegalArgumentException> { make(rule = RepeatRule(RepeatUnit.DAY, every = 1, afterCompletion = false)) }
         assertFailsWith<IllegalArgumentException> { make(rule = RepeatRule(RepeatUnit.MONTH, every = 1, afterCompletion = true, monthDay = 1)) }
+        assertFailsWith<IllegalArgumentException> { make(rule = RepeatRule(RepeatUnit.MONTH, every = 1, afterCompletion = false, monthDay = 16)) }
+    }
+
+    // Pinned to R6 and R7 (repeat-rules.md L10): made to repeat on Monday 2026-11-16, on a fixed schedule.
+
+    @Test
+    fun `every day on a fixed schedule, as Things wrote it for R6`() {
+        val t = p(make(rule = RepeatRule(RepeatUnit.DAY, every = 1, afterCompletion = false))!!, "T")
+        assertEquals(JsonPrimitive(d16 + day), t["tir"])
+        assertEquals(JsonPrimitive(d16 + day), t["icsd"])
+        assertEquals(JsonPrimitive(1), t["icc"])
+        assertEquals(JsonNull, t["sr"])
+        assertEquals(
+            Json.parseToJsonElement("""{"ed": 64092211200, "fa": 1, "fu": 16, "ia": $d16, "of": [{"dy": 0}], "rc": 0, "rrv": 4, "sr": $d16, "tp": 0, "ts": 0}"""),
+            t["rr"],
+        )
+    }
+
+    @Test
+    fun `every week on Monday and Thursday, as Things wrote it for R7`() {
+        val rule = RepeatRule(RepeatUnit.WEEK, every = 1, afterCompletion = false, weekdays = listOf(DayOfWeek.THURSDAY, DayOfWeek.MONDAY))
+        val t = p(make(rule = rule)!!, "T")
+        assertEquals(JsonPrimitive(d16 + 3 * day), t["tir"])
+        assertEquals(JsonPrimitive(d16 + 3 * day), t["icsd"])
+        assertEquals(
+            Json.parseToJsonElement("""{"ed": 64092211200, "fa": 1, "fu": 256, "ia": $d16, "of": [{"wd": 1}, {"wd": 4}], "rc": 0, "rrv": 4, "sr": $d16, "tp": 0, "ts": 0}"""),
+            t["rr"],
+        )
+    }
+
+    @Test
+    fun `the next occurrence of a fixed schedule follows the interval`() {
+        fun next(rule: RepeatRule) = p(make(rule = rule)!!, "T")["tir"]
+        assertEquals(JsonPrimitive(d16 + 3 * day), next(RepeatRule(RepeatUnit.DAY, every = 3, afterCompletion = false)))
+        assertEquals(JsonPrimitive(d16 + 14 * day), next(RepeatRule(RepeatUnit.WEEK, every = 2, afterCompletion = false, weekdays = listOf(DayOfWeek.MONDAY))))
+        assertEquals(JsonPrimitive(d16 + 7 * day), next(RepeatRule(RepeatUnit.WEEK, every = 1, afterCompletion = false, weekdays = listOf(DayOfWeek.MONDAY))))
+        assertEquals(JsonPrimitive(d16 + 6 * day), next(RepeatRule(RepeatUnit.WEEK, every = 1, afterCompletion = false, weekdays = listOf(DayOfWeek.MONDAY, DayOfWeek.SUNDAY))))
+    }
+
+    @Test
+    fun `weekly fixed schedules the app cannot place are refused`() {
+        fun weekly(every: Int, vararg days: DayOfWeek) = RepeatRule(RepeatUnit.WEEK, every, afterCompletion = false, weekdays = days.toList())
+        assertFailsWith<IllegalArgumentException> { make(rule = weekly(1)) }
+        assertFailsWith<IllegalArgumentException> { make(rule = weekly(1, DayOfWeek.TUESDAY)) }
+        assertFailsWith<IllegalArgumentException> { make(rule = weekly(2, DayOfWeek.MONDAY, DayOfWeek.THURSDAY)) }
+        assertFailsWith<IllegalArgumentException> { make(rule = RepeatRule(RepeatUnit.WEEK, 1, afterCompletion = true, weekdays = listOf(DayOfWeek.MONDAY))) }
     }
 
     @Test

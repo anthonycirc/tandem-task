@@ -86,7 +86,7 @@ class RepeatRuleTest {
         val start = java.time.LocalDate.of(2026, 11, 16)
         val rules = listOf(
             RepeatRule(RepeatUnit.DAY, every = 3, afterCompletion = false),
-            RepeatRule(RepeatUnit.WEEK, every = 1, afterCompletion = false, weekdays = listOf(DayOfWeek.MONDAY, DayOfWeek.SUNDAY)),
+            RepeatRule(RepeatUnit.WEEK, every = 1, afterCompletion = false, weekdays = listOf(DayOfWeek.SUNDAY, DayOfWeek.MONDAY)),
             RepeatRule(RepeatUnit.WEEK, every = 2, afterCompletion = true),
             RepeatRule(RepeatUnit.MONTH, every = 1, afterCompletion = false, monthDay = 15),
             RepeatRule(RepeatUnit.MONTH, every = 3, afterCompletion = false, monthDay = -1),

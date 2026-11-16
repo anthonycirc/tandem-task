@@ -31,7 +31,8 @@ data class RepeatRule(
      * The `rr` for this rule, starting on [start]: the inverse of [parse]. [anchor] is `ia`,
      * which Things sets to the first occurrence's day when it makes a to-do repeat (and to 0 when
      * it creates a repeating to-do with no occurrence yet). `rc` 0, `rrv` 4 and `ts` 0 are the
-     * constants of every day and week rule in the user's history.
+     * constants of every day and week rule in the user's history. A fixed daily rule carries
+     * `of` [{dy: 0}], weekdays are listed Sunday first, as Things wrote them for R6 and R7.
      */
     fun toRr(start: LocalDate, anchor: LocalDate?): JsonObject = buildJsonObject {
         put("ed", endDate?.let { it.toEpochDay() * 86_400 } ?: NEVER)
@@ -40,8 +41,8 @@ data class RepeatRule(
         put("ia", anchor?.let { it.toEpochDay() * 86_400 } ?: 0L)
         putJsonArray("of") {
             when (unit) {
-                RepeatUnit.DAY -> Unit
-                RepeatUnit.WEEK -> weekdays.forEach { day -> addJsonObject { put("wd", day.value % 7) } }
+                RepeatUnit.DAY -> if (!afterCompletion) addJsonObject { put("dy", 0) }
+                RepeatUnit.WEEK -> weekdays.map { it.value % 7 }.distinct().sorted().forEach { day -> addJsonObject { put("wd", day) } }
                 RepeatUnit.MONTH, RepeatUnit.YEAR -> if (monthDay != null) addJsonObject {
                     put("dy", if (monthDay < 0) -1 else monthDay - 1)
                     month?.let { put("mo", it.value - 1) }
@@ -53,6 +54,20 @@ data class RepeatRule(
         put("sr", start.toEpochDay() * 86_400)
         put("tp", if (afterCompletion) 1 else 0)
         put("ts", 0)
+    }
+
+    /**
+     * The first occurrence of this fixed schedule after [day], an occurrence itself: [every] days
+     * later, or the next of its [weekdays] (every week), or the same weekday [every] weeks later.
+     * Null for the schedules the app does not place (see [TaskEdits.canWriteRule]).
+     */
+    fun nextAfter(day: LocalDate): LocalDate? = when {
+        afterCompletion -> null
+        unit == RepeatUnit.DAY -> day.plusDays(every.toLong())
+        unit == RepeatUnit.WEEK && every == 1 && weekdays.isNotEmpty() ->
+            (1L..7L).map(day::plusDays).first { it.dayOfWeek in weekdays }
+        unit == RepeatUnit.WEEK && weekdays.toSet() == setOf(day.dayOfWeek) -> day.plusWeeks(every.toLong())
+        else -> null
     }
 
     companion object {
