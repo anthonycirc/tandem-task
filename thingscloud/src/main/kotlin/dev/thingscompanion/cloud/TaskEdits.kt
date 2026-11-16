@@ -49,6 +49,28 @@ object TaskEdits {
         return if (changes.isEmpty()) null else update(task, changes, now)
     }
 
+    /**
+     * The template update the Things apps write with the completion of an "after completion"
+     * instance: `acrd` the day it was completed, `tir` that day plus the interval (when the next
+     * instance starts; a Things client creates it then). No `md`, as they write it.
+     */
+    fun afterCompletion(template: Task, rule: RepeatRule, completedOn: LocalDate): JsonObject {
+        val days = when (rule.unit) {
+            RepeatUnit.DAY -> rule.every.toLong()
+            RepeatUnit.WEEK -> 7L * rule.every
+            else -> throw IllegalArgumentException("Only daily and weekly repeats are checked from the app.")
+        }
+        fun midnight(date: LocalDate) = JsonPrimitive(date.toEpochDay() * InboxTask.SECONDS_PER_DAY)
+        return buildJsonObject {
+            put("t", 1)
+            put("e", template.entity)
+            put("p", buildJsonObject {
+                put("acrd", midnight(completedOn))
+                put("tir", midnight(completedOn.plusDays(days)))
+            })
+        }
+    }
+
     /** Open, completed or cancelled (`ss` 0, 3, 2), with the stop date Things writes (`sp`). */
     fun setStatus(task: Task, status: TaskStatus, now: Double): JsonObject = update(
         task,

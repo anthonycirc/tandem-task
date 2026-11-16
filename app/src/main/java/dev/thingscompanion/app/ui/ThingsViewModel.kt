@@ -312,7 +312,7 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
     )
 
     fun setDone(id: String, done: Boolean) =
-        change(PendingChange.SetDone(newId(), id, done), if (done) R.string.marked_done else R.string.marked_open)
+        change(PendingChange.SetDone(newId(), id, done, day = ThingsDay.today().toEpochDay()), if (done) R.string.marked_done else R.string.marked_open)
 
     /** Swipe to reschedule: the to-do's own title and notes, a new When; the reminder stays when there is still a day. */
     fun reschedule(id: String, schedule: Schedule) {

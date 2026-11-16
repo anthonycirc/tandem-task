@@ -47,14 +47,18 @@ class ThingsCloudClient(
     fun pull(historyKey: String, state: HistoryState, startIndex: Long = 0): Long =
         pullWithHead(historyKey, state, startIndex).nextStartIndex
 
-    fun pullWithHead(historyKey: String, state: HistoryState, startIndex: Long = 0): PullResult {
+    /** [onItem] sees each raw history item, in order (diagnostics only). */
+    fun pullWithHead(historyKey: String, state: HistoryState, startIndex: Long = 0, onItem: (JsonObject) -> Unit = {}): PullResult {
         var index = startIndex
         var head: Long? = null
         while (true) {
             val page = send("$baseUrl/history/${percentEncode(historyKey)}/items?start-index=$index", "history items")
             val items = page["items"] as? JsonArray ?: JsonArray(emptyList())
             for (item in items) {
-                (item as? JsonObject)?.let { state.apply(WireParser.parseItem(it)) }
+                (item as? JsonObject)?.let {
+                    onItem(it)
+                    state.apply(WireParser.parseItem(it))
+                }
             }
             index += items.size
             head = page["current-item-index"].primitiveOrNull()?.longOrNull ?: head

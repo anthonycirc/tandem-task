@@ -15,7 +15,8 @@ import kotlin.system.exitProcess
  * Live read-only check against a real account:
  *   THINGS_EMAIL=... THINGS_PASSWORD=... ./gradlew -q :thingscloud:run
  * Prints counts only. Writes each list's uuids and dates to build/smoke/lists.json, plus the replayed state (your data, gitignored)
- * so they can be compared with the Things database on a Mac. Never prints or stores the credentials.
+ * so they can be compared with the Things database on a Mac, and how "repeat after completion" to-dos are written
+ * (repeat-after-completion.json: shapes and day offsets, no content). Never prints or stores the credentials.
  */
 fun main() {
     val email = System.getenv("THINGS_EMAIL")
@@ -28,7 +29,8 @@ fun main() {
     val client = ThingsCloudClient(appInstanceId = UUID.randomUUID().toString())
     val historyKey = client.authenticate(email, password)
     val state = HistoryState()
-    val nextIndex = client.pull(historyKey, state)
+    val rawItems = mutableListOf<kotlinx.serialization.json.JsonObject>()
+    val nextIndex = client.pullWithHead(historyKey, state, onItem = { rawItems += it }).nextStartIndex
     val library = ThingsLibrary.from(state)
     val today = ThingsDay.today()
 
@@ -69,7 +71,16 @@ fun main() {
 
     println("History items: $nextIndex, objects: ${state.objects.size}, non-midnight days: ${dayRemainders.size}")
     lists.forEach { (name, tasks) -> println("$name: ${tasks.size}") }
-    println("Wrote ${out.parentFile.absolutePath}/{lists,diagnostics,state}.json")
+    // How "repeat after completion" to-dos are written: shapes and day offsets only, safe to share.
+    val repeats = RepeatDiagnostics.analyze(rawItems)
+    File("build/smoke/repeat-after-completion.json").writeText(repeats.toString())
+    println("Repeat after completion: ${repeats["afterCompletionTemplates"]} templates, ${repeats["eventsSeen"]} writes")
+    (repeats["patterns"] as kotlinx.serialization.json.JsonArray).take(8).forEach { println("  $it") }
+    (repeats["completions"] as kotlinx.serialization.json.JsonArray).take(6).forEach { println("  completion $it") }
+    (repeats["nextInstances"] as kotlinx.serialization.json.JsonArray).take(6).forEach { println("  next $it") }
+    // Raw history (your data, local and gitignored) so the write shapes can be studied again without pulling.
+    File("build/smoke/history.json").writeText(kotlinx.serialization.json.JsonArray(rawItems).toString())
+    println("Wrote ${out.parentFile.absolutePath}/{lists,diagnostics,state,repeat-after-completion}.json")
 }
 
 /** Shape of the data without any content: entity counts, and value kinds of the list-deciding fields per entity. */

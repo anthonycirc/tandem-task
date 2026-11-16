@@ -108,7 +108,9 @@ class ThingsLibrary private constructor(
     }
 
     /** Same to-dos as check-off: moving a repeating template or an "after completion" repeat to the Trash is left to Things. */
-    fun canTrash(task: Task): Boolean = canComplete(task) || canEditProject(task) || canTrashHeading(task)
+    // An "after completion" instance is checkable, but trashing one is left to Things.
+    fun canTrash(task: Task): Boolean =
+        (canComplete(task) && afterCompletionRule(task) == null) || canEditProject(task) || canTrashHeading(task)
 
     /** A heading of a project the app may change; it goes to the Trash with its to-dos. */
     private fun canTrashHeading(task: Task): Boolean =
@@ -167,15 +169,30 @@ class ThingsLibrary private constructor(
         ?.minus(1) ?: 0
 
     /**
-     * Whether the app may check or uncheck this to-do: plain to-dos, and repeating instances whose
-     * template repeats on a fixed schedule (as things3-cloud allows). Templates and "after
-     * completion" repeats need template bookkeeping the app does not do.
+     * Whether the app may check or uncheck this to-do: plain to-dos, repeating instances whose
+     * template repeats on a fixed schedule (as things3-cloud allows), and open instances of
+     * "after completion" templates repeating by days or weeks (checked as the Things apps do).
      */
     fun canComplete(task: Task): Boolean {
         if (task.type != TaskType.TODO || task.trashed || task.isRecurrenceTemplate || task.repeatType != null) return false
         if (task.recurrenceTemplateIds.isEmpty()) return true
         val template = task.recurrenceTemplateIds.singleOrNull()?.let(tasks::get) ?: return false
-        return template.repeatType == 0
+        return when (template.repeatType) {
+            0 -> true
+            // After completion: checking only, and only for the units whose writes are known.
+            1 -> task.isOpen && afterCompletionRule(task) != null
+            else -> false
+        }
+    }
+
+    /**
+     * For an instance of an "after completion" template repeating by days or weeks: the template
+     * and its rule, which checking the instance must move on (see [TaskEdits.afterCompletion]).
+     */
+    fun afterCompletionRule(task: Task): Pair<Task, RepeatRule>? {
+        val template = task.recurrenceTemplateIds.singleOrNull()?.let(tasks::get) ?: return null
+        val rule = repeatRule(template)?.takeIf { it.afterCompletion && (it.unit == RepeatUnit.DAY || it.unit == RepeatUnit.WEEK) } ?: return null
+        return template to rule
     }
 
     /** Projects the app may complete, cancel, reopen, date or edit: not repeating ones. */

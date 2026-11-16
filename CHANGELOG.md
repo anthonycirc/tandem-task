@@ -2,6 +2,12 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-11-16
+
+### Added
+
+- **Check off "repeat after completion" to-dos** that repeat by days or weeks, written as the Things apps write it: the to-do is completed and its repeat moves on, so Things creates the next one on the right day. Monthly and yearly ones stay with Things, and a checked one is unchecked in Things.
+
 ## [0.3.0] - 2026-11-16
 
 ### Added
@@ -63,6 +69,7 @@ First public release.
 - Background sync every 30 minutes.
 - Light, dark or system theme. English and French.
 
+[0.3.1]: https://github.com/anthonycirc/tandem-task/releases/tag/v0.3.1
 [0.3.0]: https://github.com/anthonycirc/tandem-task/releases/tag/v0.3.0
 [0.2.0]: https://github.com/anthonycirc/tandem-task/releases/tag/v0.2.0
 [0.1.0]: https://github.com/anthonycirc/tandem-task/releases/tag/v0.1.0

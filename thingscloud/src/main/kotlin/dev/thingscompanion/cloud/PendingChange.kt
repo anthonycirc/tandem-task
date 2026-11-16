@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -165,14 +166,24 @@ sealed interface PendingChange {
 
     @Serializable
     @SerialName("done")
-    data class SetDone(override val opId: String, val taskId: String, val done: Boolean) : PendingChange {
+    data class SetDone(
+        override val opId: String,
+        val taskId: String,
+        val done: Boolean,
+        /** The local day of the tap (epoch day): an "after completion" repeat counts from it, even if sent later. */
+        val day: Long? = null,
+    ) : PendingChange {
         override val replaces get() = "done:$taskId"
 
         override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
             val task = library.task(taskId) ?: throw NoSuchElementException("The to-do no longer exists.")
             if ((task.status == TaskStatus.COMPLETED) == done) return null
             require(library.canComplete(task)) { "This to-do can't be checked from the app." }
-            return mapOf(taskId to TaskEdits.complete(task, done, now))
+            val completion = mapOf(taskId to TaskEdits.complete(task, done, now))
+            // An "after completion" repeat also moves its template on, in the same item.
+            val (template, rule) = library.afterCompletionRule(task) ?: return completion
+            val completedOn = day?.let(LocalDate::ofEpochDay) ?: ThingsDay.today(Instant.ofEpochMilli((now * 1000).toLong()))
+            return completion + (template.id to TaskEdits.afterCompletion(template, rule, completedOn))
         }
     }
 

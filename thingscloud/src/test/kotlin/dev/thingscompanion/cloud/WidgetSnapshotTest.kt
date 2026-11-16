@@ -65,7 +65,7 @@ class WidgetSnapshotTest {
     @Test
     fun `to-dos the app cannot check are marked so the widget opens them instead`() {
         val lib = library(
-            """{"tmpl": {"t": 0, "e": "Task7", "p": {"tt": "Water", "st": 1, "rr": {"tp": 1, "fu": 16, "fa": 2}}},
+            """{"tmpl": {"t": 0, "e": "Task7", "p": {"tt": "Water", "st": 1, "rr": {"tp": 1, "fu": 8, "fa": 1}}},
                 "inst": {"t": 0, "e": "Task7", "p": {"tt": "Water", "st": 1, "sr": $day15, "rt": ["tmpl"]}},
                 "plain": {"t": 0, "e": "Task7", "p": {"tt": "Call", "st": 1, "sr": $day15}}}"""
         )

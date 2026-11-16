@@ -10,6 +10,7 @@ import dev.thingscompanion.app.data.readWidgetSnapshot
 import dev.thingscompanion.app.data.writeWidgetSnapshot
 import dev.thingscompanion.app.sync.BackgroundSync
 import dev.thingscompanion.cloud.PendingChange
+import dev.thingscompanion.cloud.ThingsDay
 import dev.thingscompanion.cloud.ThingsIds
 
 /**
@@ -33,7 +34,7 @@ class CheckTaskAction : ActionCallback {
             ListWidget.refreshAll(context)
             return
         }
-        repository.enqueue(PendingChange.SetDone(ThingsIds.random(), task.id, true))
+        repository.enqueue(PendingChange.SetDone(ThingsIds.random(), task.id, true, day = ThingsDay.today().toEpochDay()))
         BackgroundSync.sendSoon(context)
     }
 

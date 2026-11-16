@@ -163,7 +163,8 @@ class EditTest {
         sync().editTask("hk", "x", "Call", "", Schedule.Inbox, null)
         assertEquals(1, server.requestCount)
 
-        server.enqueue(page("""{"t": {"t": 0, "e": "Task7", "p": {"tt": "H", "st": 1, "rr": {"tp": 1}}},
+        // A daily "after completion" repeat: only the queued SetDone also moves its template on.
+        server.enqueue(page("""{"t": {"t": 0, "e": "Task7", "p": {"tt": "H", "st": 1, "rr": {"tp": 1, "fu": 16, "fa": 1}}},
                              "i": {"t": 0, "e": "Task7", "p": {"tt": "H", "st": 1, "sr": $day15, "rt": ["t"]}}}""", head = 52))
         assertFailsWith<IllegalArgumentException> { sync().completeTask("hk", "i", done = true) }
         assertEquals(2, server.requestCount)

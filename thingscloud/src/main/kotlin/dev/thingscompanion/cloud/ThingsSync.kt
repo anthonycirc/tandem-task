@@ -91,6 +91,8 @@ class ThingsSync(
     fun completeTask(historyKey: String, id: String, done: Boolean, beforeSave: () -> Unit = {}): ThingsLibrary =
         update(historyKey, id, beforeSave) { library, task ->
             require(library.canComplete(task)) { "This to-do can't be checked from the app." }
+            // This path writes the to-do alone: "after completion" repeats go through PendingChange.SetDone.
+            require(library.afterCompletionRule(task) == null) { "This to-do can't be checked from the app." }
             if ((task.status == TaskStatus.COMPLETED) == done) null else TaskEdits.complete(task, done, now())
         }
 
