@@ -342,6 +342,34 @@ sealed interface PendingChange {
         }
     }
 
+    /**
+     * Deletes trashed to-dos for good, as Things 3 does when the Trash is emptied: each to-do and
+     * its checklist items `t:2`, live instances of a deleted template unlinked (`rt` []), and a
+     * `Tombstone2` for each deleted plain to-do and checklist item (none for templates, as Things
+     * wrote them). [taskIds] are frozen when the user confirms, so to-dos trashed later stay.
+     */
+    @Serializable
+    @SerialName("delete_forever")
+    data class DeleteForever(override val opId: String, val taskIds: List<String>) : PendingChange {
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            val tasks = taskIds.distinct().mapNotNull(library::task).filter(library::canDeleteForever)
+            if (tasks.isEmpty()) return null
+            val deleted = tasks.map { it.id }.toSet()
+            val payload = linkedMapOf<String, JsonObject>()
+            for (task in tasks) {
+                val checklist = library.checklist(task.id).map { it.id }
+                payload[task.id] = TaskEdits.deleteForever("Task7")
+                checklist.forEach { payload[it] = TaskEdits.deleteForever("ChecklistItem3") }
+                if (task.isRecurrenceTemplate) {
+                    library.instancesOf(task.id).filter { it.id !in deleted }.forEach { payload[it.id] = TaskEdits.unlinkInstance() }
+                } else {
+                    (listOf(task.id) + checklist).forEach { payload[TaskEdits.tombstoneId(opId, it)] = TaskEdits.tombstone(it, now) }
+                }
+            }
+            return payload
+        }
+    }
+
     @Serializable
     @SerialName("trash")
     data class SetTrashed(override val opId: String, val taskId: String, val trashed: Boolean) : PendingChange {

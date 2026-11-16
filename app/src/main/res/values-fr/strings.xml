@@ -182,5 +182,14 @@
     <string name="repeat_of_month">de %1$s</string>
     <string name="repeat_of_month_vowel">d’%1$s</string>
     <string name="repeat_pick_text">Le %1$s</string>
+    <string name="empty_trash">Vider la corbeille</string>
+    <string name="delete_forever">Supprimer</string>
+    <string name="delete_forever_text">Action irréversible : la suppression s\'applique à tous les appareils.</string>
+    <string name="trash_kept_for_things">Les projets et en-têtes de la corbeille se suppriment dans Things.</string>
+    <string name="deleted_forever">Supprimé définitivement</string>
+    <plurals name="delete_forever_title">
+        <item quantity="one">Supprimer définitivement cette tâche ?</item>
+        <item quantity="other">Supprimer définitivement %1$d tâches ?</item>
+    </plurals>
     <string name="now_repeats">Répétition activée</string>
 </resources>

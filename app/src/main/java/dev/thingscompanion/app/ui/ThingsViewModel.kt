@@ -348,6 +348,9 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
 
     fun restore(id: String) = change(PendingChange.SetTrashed(newId(), id, false), done = R.string.restored)
 
+    /** Deletes these trashed to-dos for good; there is no undo. */
+    fun deleteForever(ids: List<String>) = change(PendingChange.DeleteForever(newId(), ids), done = R.string.deleted_forever)
+
     /** The snackbar's Undo. */
     fun undo(change: PendingChange) = change(change)
 

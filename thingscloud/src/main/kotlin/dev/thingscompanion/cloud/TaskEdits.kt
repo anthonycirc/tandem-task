@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.security.MessageDigest
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -312,6 +313,30 @@ object TaskEdits {
         put("e", entity)
         put("p", JsonObject(emptyMap()))
     }
+
+    /** A deletion as Things 3 writes it when the Trash is emptied: the current entity name, whatever the object was created as. */
+    fun deleteForever(entity: String): JsonObject = delete(entity)
+
+    /** A live instance whose template is deleted for good: no longer linked, no `md`. */
+    fun unlinkInstance(): JsonObject = buildJsonObject {
+        put("t", 1)
+        put("e", "Task7")
+        put("p", buildJsonObject { put("rt", JsonArray(emptyList())) })
+    }
+
+    /** The record Things keeps of a deleted object: when (`dld`) and which (`dloid`). */
+    fun tombstone(deletedId: String, now: Double): JsonObject = buildJsonObject {
+        put("t", 0)
+        put("e", "Tombstone2")
+        put("p", buildJsonObject {
+            put("dld", InboxTask.plainNumber(now))
+            put("dloid", deletedId)
+        })
+    }
+
+    /** A tombstone id derived from the change and the object, so a change sent twice writes the same tombstones. */
+    fun tombstoneId(opId: String, deletedId: String): String =
+        ThingsIds.encode(MessageDigest.getInstance("SHA-1").digest("$opId:$deletedId".toByteArray(Charsets.UTF_8)).copyOf(16))
 
     private fun update(task: Task, changes: Map<String, JsonElement>, now: Double) = update(task.entity, changes, now)
 

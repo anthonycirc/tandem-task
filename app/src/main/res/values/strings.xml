@@ -180,5 +180,14 @@
     <string name="repeat_of_month">of %1$s</string>
     <string name="repeat_of_month_vowel">of %1$s</string>
     <string name="repeat_pick_text">On %1$s</string>
+    <string name="empty_trash">Empty Trash</string>
+    <string name="delete_forever">Delete</string>
+    <string name="delete_forever_text">This can\'t be undone: they are deleted on all your devices.</string>
+    <string name="trash_kept_for_things">Projects and headings in the Trash are deleted in Things.</string>
+    <string name="deleted_forever">Deleted for good</string>
+    <plurals name="delete_forever_title">
+        <item quantity="one">Delete this to-do for good?</item>
+        <item quantity="other">Delete %1$d to-dos for good?</item>
+    </plurals>
     <string name="now_repeats">Now repeats</string>
 </resources>

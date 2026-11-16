@@ -2,6 +2,12 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.6] - 2026-11-16
+
+### Added
+
+- **Delete for good from the Trash.** A trashed to-do has a Delete button, and the Trash an "Empty Trash" button, both behind a confirmation, written as Things 3 writes it: the to-do and its checklist are deleted, and a deleted repeating to-do's remaining occurrences become ordinary to-dos. Trashed projects and headings are deleted in Things.
+
 ## [0.3.5] - 2026-11-16
 
 ### Added

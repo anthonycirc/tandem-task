@@ -119,6 +119,12 @@ class ThingsLibrary private constructor(
 
     fun canRestore(task: Task): Boolean = task.trashed && task.isCurrentEntity
 
+    /** Trashed to-dos (repeating templates included) the app may delete for good; projects and headings stay for Things. */
+    fun canDeleteForever(task: Task): Boolean = task.trashed && task.isCurrentEntity && task.type == TaskType.TODO
+
+    /** The to-dos generated from a repeating template. */
+    fun instancesOf(templateId: String): List<Task> = tasks.values.filter { templateId in it.recurrenceTemplateIds }
+
     /** Checklist of plain to-dos and repeating instances; a template's checklist is left to Things. */
     fun canEditChecklist(task: Task): Boolean = task.isTodo && !task.trashed && !task.isRecurrenceTemplate && task.repeatType == null
 

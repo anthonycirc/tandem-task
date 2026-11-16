@@ -222,6 +222,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     var movingId by rememberSaveable { mutableStateOf<String?>(null) }
     var repeatingId by rememberSaveable { mutableStateOf<String?>(null) }
     var deletingAreaId by rememberSaveable { mutableStateOf<String?>(null) }
+    // To-dos to delete for good, frozen when asked: the confirmation sends exactly these.
+    var deletingForever by rememberSaveable { mutableStateOf<List<String>?>(null) }
 
     // A widget tap asked to open the add form or a to-do.
     LaunchedEffect(state.launchOpenAdd, state.launchTaskId) {
@@ -315,6 +317,21 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 }) { Text(stringResource(R.string.delete_area)) }
             },
             dismissButton = { TextButton(onClick = { deletingAreaId = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+    deletingForever?.let { ids ->
+        AlertDialog(
+            onDismissRequest = { deletingForever = null },
+            title = { Text(pluralStringResource(R.plurals.delete_forever_title, ids.size, ids.size)) },
+            text = { Text(stringResource(R.string.delete_forever_text)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    deletingForever = null
+                    if (taskId in ids) taskId = null
+                    viewModel.deleteForever(ids)
+                }) { Text(stringResource(R.string.delete_forever), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deletingForever = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
     naming?.let { request ->
@@ -551,6 +568,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                     onAddChecklistItem = viewModel::addChecklistItem,
                     onDeleteChecklistItem = viewModel::deleteChecklistItem,
                     onRestore = viewModel::restore,
+                    onDeleteForever = { deletingForever = listOf(it) },
                 )
                 openProject != null -> {
                     if (!filter.isEmpty) ActiveFilters(library, filter, viewModel::setFilter)
@@ -642,7 +660,26 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                         ListTab.AREAS -> AreaList(library, title, onOpen = { areaId = it.id }, onDelete = { deletingAreaId = it.id })
                         ListTab.TRASH -> TaskList(
                             library = library,
-                            header = { ListHeader(ListKind.TRASH, title) },
+                            header = {
+                                Column {
+                                    ListHeader(ListKind.TRASH, title)
+                                    val trash = library.trash()
+                                    val deletable = trash.filter(library::canDeleteForever).map { it.id }
+                                    if (deletable.isNotEmpty()) {
+                                        TextButton(onClick = { deletingForever = deletable }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                                            Text(stringResource(R.string.empty_trash), color = MaterialTheme.colorScheme.error)
+                                        }
+                                    }
+                                    if (trash.any { !library.canDeleteForever(it) }) {
+                                        Text(
+                                            stringResource(R.string.trash_kept_for_things),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                                        )
+                                    }
+                                }
+                            },
                             groups = listOf(Group.None to library.trash()),
                             emptyText = stringResource(R.string.trash_empty),
                             actions = rowActions,
@@ -1476,6 +1513,7 @@ private fun TaskDetail(
     onAddChecklistItem: (String, String) -> Unit,
     onDeleteChecklistItem: (String) -> Unit,
     onRestore: (String) -> Unit,
+    onDeleteForever: (String) -> Unit,
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val focusManager = LocalFocusManager.current
@@ -1489,6 +1527,9 @@ private fun TaskDetail(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(stringResource(R.string.in_trash), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                if (library.canDeleteForever(task)) {
+                    TextButton(onClick = { onDeleteForever(task.id) }) { Text(stringResource(R.string.delete_forever), color = MaterialTheme.colorScheme.error) }
+                }
                 if (library.canRestore(task)) TextButton(onClick = { onRestore(task.id) }) { Text(stringResource(R.string.restore)) }
             }
         }
