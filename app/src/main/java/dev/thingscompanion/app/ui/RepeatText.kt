@@ -4,6 +4,7 @@ import android.content.Context
 import dev.thingscompanion.app.R
 import dev.thingscompanion.cloud.RepeatRule
 import dev.thingscompanion.cloud.RepeatUnit
+import java.time.Month
 import java.time.MonthDay
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -20,8 +21,9 @@ fun describeRepeat(context: Context, rule: RepeatRule): String {
         RepeatUnit.YEAR -> if (n == 1) context.getString(R.string.repeat_yearly) else context.getString(R.string.repeat_years, n)
     }
     val ordinal = rule.weekdayOrdinal
+    val ofMonth = rule.month?.let { " " + ofMonth(context, it, locale) }.orEmpty()
     if (ordinal != null && rule.weekdays.size == 1) {
-        text = context.getString(R.string.repeat_on_nth, text, ordinalName(context, ordinal), rule.weekdays.single().getDisplayName(TextStyle.FULL, locale))
+        text = context.getString(R.string.repeat_on_nth, text, ordinalName(context, ordinal), rule.weekdays.single().getDisplayName(TextStyle.FULL, locale)) + ofMonth
     } else if (rule.weekdays.isNotEmpty()) {
         val days = rule.weekdays.joinToString(", ") { it.getDisplayName(TextStyle.FULL, locale) }
         text = context.getString(R.string.repeat_on, text, days)
@@ -31,7 +33,7 @@ fun describeRepeat(context: Context, rule: RepeatRule): String {
         }.getOrNull()
         if (date != null) text = context.getString(R.string.repeat_on, text, date)
     } else if (rule.monthDay == -1) {
-        text = context.getString(R.string.repeat_on_last_day, text)
+        text = context.getString(R.string.repeat_on_last_day, text) + ofMonth
     } else if (rule.monthDay != null) {
         text = context.getString(R.string.repeat_on_day, text, rule.monthDay)
     }
@@ -48,4 +50,11 @@ fun ordinalName(context: Context, ordinal: Int): String = when (ordinal) {
     4 -> context.getString(R.string.repeat_ordinal_4)
     5 -> context.getString(R.string.repeat_ordinal_5)
     else -> context.getString(R.string.repeat_ordinal_last)
+}
+
+/** "of November", or in French "de novembre" / "d’avril". */
+fun ofMonth(context: Context, month: Month, locale: Locale): String {
+    val name = month.getDisplayName(TextStyle.FULL, locale)
+    val vowel = name.firstOrNull()?.lowercaseChar()?.let { it in "aeiouéèâ" } == true
+    return context.getString(if (vowel) R.string.repeat_of_month_vowel else R.string.repeat_of_month, name)
 }

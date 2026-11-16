@@ -59,12 +59,15 @@ class RepeatCompleteTest {
     }
 
     @Test
-    fun `yearly after-completion repeats stay with Things`() {
-        for (unit in listOf(4)) {
-            val lib = library("""{"tp": 1, "fu": $unit, "fa": 1}""")
-            assertFalse(lib.canComplete(lib.task("inst")!!), "fu $unit")
-            assertFailsWith<IllegalArgumentException> { PendingChange.SetDone("op", "inst", true).build(lib, now) }
-        }
+    fun `yearly after-completion repeats move on by years, as Things wrote it for Y3`() {
+        assertEquals(JsonPrimitive(d15 + 365 * day), props(complete("""{"tp": 1, "fu": 4, "fa": 1}"""), "tmpl")["tir"])
+    }
+
+    @Test
+    fun `after-completion repeats in units the app does not know stay with Things`() {
+        val lib = library("""{"tp": 1, "fu": 64, "fa": 1}""")
+        assertFalse(lib.canComplete(lib.task("inst")!!))
+        assertFailsWith<IllegalArgumentException> { PendingChange.SetDone("op", "inst", true).build(lib, now) }
         val daily = library("""{"tp": 1, "fu": 16, "fa": 1}""")
         assertTrue(daily.canComplete(daily.task("inst")!!))
     }

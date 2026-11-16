@@ -89,7 +89,7 @@ class MakeRepeatTest {
         assertFailsWith<IllegalArgumentException> { make("undated") }
         assertFailsWith<IllegalArgumentException> { make("deadline") }
         assertFailsWith<IllegalArgumentException> { make(rule = RepeatRule(RepeatUnit.MONTH, every = 1, afterCompletion = true, monthDay = 1)) }
-        assertFailsWith<IllegalArgumentException> { make(rule = RepeatRule(RepeatUnit.YEAR, every = 1, afterCompletion = false, monthDay = 16, month = java.time.Month.NOVEMBER)) }
+        assertFailsWith<IllegalArgumentException> { make(rule = RepeatRule(RepeatUnit.YEAR, every = 1, afterCompletion = false, monthDay = 16, month = java.time.Month.OCTOBER)) }
     }
 
     // Pinned to R6 and R7 (repeat-rules.md L10): made to repeat on Monday 2026-11-16, on a fixed schedule.
@@ -202,5 +202,51 @@ class MakeRepeatTest {
         assertFailsWith<IllegalArgumentException> { make(rule = monthly(ordinal = 3, weekday = DayOfWeek.TUESDAY)) }
         assertFailsWith<IllegalArgumentException> { make(rule = monthly()) }
         assertFailsWith<IllegalArgumentException> { make(rule = monthly(monthDay = 16, after = true)) }
+    }
+
+    // Pinned to Y1, Y2 and Y3 (repeat-rules.md L18): made to repeat on Monday 2026-11-16.
+
+    private fun yearlyRr(of: String, start: Long = d16, tp: Int = 0, ia: Long = start) =
+        Json.parseToJsonElement("""{"ed": 64092211200, "fa": 1, "fu": 4, "ia": $ia, "of": $of, "rc": 0, "rrv": 4, "sr": $start, "tp": $tp, "ts": 0}""")
+
+    private fun yearly(monthDay: Int? = null, ordinal: Int? = null, weekday: DayOfWeek? = null, after: Boolean = false, month: java.time.Month? = java.time.Month.NOVEMBER) =
+        RepeatRule(RepeatUnit.YEAR, 1, after, weekdays = listOfNotNull(weekday), monthDay = monthDay, month = month.takeIf { !after }, weekdayOrdinal = ordinal)
+
+    @Test
+    fun `every year on the to-do's day, as Things wrote it for Y1`() {
+        val t = p(make(rule = yearly(monthDay = 16))!!, "T")
+        assertEquals(yearlyRr("""[{"dy": 15, "mo": 10}]"""), t["rr"])
+        assertEquals(JsonPrimitive(d16 + 365 * day), t["tir"])
+        assertEquals(JsonPrimitive(d16 + 365 * day), t["icsd"])
+    }
+
+    @Test
+    fun `every year on the third Monday of November, as Things wrote it for Y2`() {
+        val t = p(make(rule = yearly(ordinal = 3, weekday = DayOfWeek.MONDAY))!!, "T")
+        assertEquals(yearlyRr("""[{"mo": 10, "wd": 1, "wdo": 3}]"""), t["rr"])
+        assertEquals(JsonPrimitive(d16 + 364 * day), t["tir"])
+    }
+
+    @Test
+    fun `every year after completion, as Things wrote it for Y3`() {
+        val t = p(make(rule = yearly(after = true))!!, "T")
+        assertEquals(yearlyRr("[]", tp = 1, ia = 0), t["rr"])
+        assertEquals(JsonPrimitive(d16 + day), t["icsd"])
+        assertEquals(JsonNull, t["tir"])
+    }
+
+    @Test
+    fun `every year on the last day of the to-do's month`() {
+        val t = p(make("end", yearly(monthDay = -1))!!, "T")
+        assertEquals(yearlyRr("""[{"dy": -1, "mo": 10}]""", start = d16 + 14 * day), t["rr"])
+        assertEquals(JsonPrimitive(d16 + 14 * day + 365 * day), t["tir"])
+    }
+
+    @Test
+    fun `yearly rules the to-do's day is not an occurrence of are refused`() {
+        assertFailsWith<IllegalArgumentException> { make(rule = yearly(monthDay = 16, month = java.time.Month.DECEMBER)) }
+        assertFailsWith<IllegalArgumentException> { make(rule = yearly(monthDay = 16, month = null)) }
+        assertFailsWith<IllegalArgumentException> { make(rule = yearly(ordinal = 2, weekday = DayOfWeek.MONDAY)) }
+        assertFailsWith<IllegalArgumentException> { make(rule = yearly(monthDay = -1)) }
     }
 }

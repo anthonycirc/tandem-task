@@ -59,7 +59,7 @@ object TaskEdits {
             RepeatUnit.DAY -> completedOn.plusDays(rule.every.toLong())
             RepeatUnit.WEEK -> completedOn.plusWeeks(rule.every.toLong())
             RepeatUnit.MONTH -> completedOn.plusMonths(rule.every.toLong())
-            else -> throw IllegalArgumentException("Yearly repeats are checked in Things.")
+            RepeatUnit.YEAR -> completedOn.plusYears(rule.every.toLong())
         }
         fun midnight(date: LocalDate) = JsonPrimitive(date.toEpochDay() * InboxTask.SECONDS_PER_DAY)
         return buildJsonObject {
@@ -73,13 +73,13 @@ object TaskEdits {
     }
 
     /**
-     * The rules the app writes for a to-do on [start], by days, weeks or months with no end: after
+     * The rules the app writes for a to-do on [start], with no end: after
      * completion, or on a fixed schedule that [start] is an occurrence of (a weekly one on several
      * days only every week, since which week Things counts from is unknown).
      */
     fun canWriteRule(rule: RepeatRule, start: LocalDate): Boolean {
-        if (rule.unit == RepeatUnit.YEAR || rule.every !in 1..365 || rule.endDate != null) return false
-        val plain = rule.monthDay == null && rule.weekdayOrdinal == null
+        if (rule.every !in 1..365 || rule.endDate != null) return false
+        val plain = rule.monthDay == null && rule.weekdayOrdinal == null && rule.month == null
         return when {
             rule.afterCompletion -> plain && rule.weekdays.isEmpty()
             rule.unit == RepeatUnit.DAY -> plain && rule.weekdays.isEmpty()

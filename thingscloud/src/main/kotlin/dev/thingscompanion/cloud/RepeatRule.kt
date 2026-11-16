@@ -48,6 +48,7 @@ data class RepeatRule(
                 RepeatUnit.DAY -> if (!afterCompletion) addJsonObject { put("dy", 0) }
                 RepeatUnit.WEEK -> weekdays.map { it.value % 7 }.distinct().sorted().forEach { day -> addJsonObject { put("wd", day) } }
                 RepeatUnit.MONTH, RepeatUnit.YEAR -> if (weekdayOrdinal != null && weekdays.size == 1) addJsonObject {
+                    month?.let { put("mo", it.value - 1) }
                     put("wd", weekdays.single().value % 7)
                     put("wdo", weekdayOrdinal)
                 } else if (monthDay != null) addJsonObject {
@@ -66,7 +67,8 @@ data class RepeatRule(
     /**
      * The first occurrence of this fixed schedule after [day], an occurrence itself: [every] days
      * later, or the next of its [weekdays] (every week), or the same weekday [every] weeks later,
-     * or its day of the month [every] months later (the 31st falls on a shorter month's last day).
+     * or its day of the month [every] months (or years, in its [month]) later; the 31st falls on a
+     * shorter month's last day.
      * Null for the schedules the app does not place (see [TaskEdits.canWriteRule]).
      */
     fun nextAfter(day: LocalDate): LocalDate? = when {
@@ -75,9 +77,10 @@ data class RepeatRule(
         unit == RepeatUnit.WEEK && every == 1 && weekdays.isNotEmpty() ->
             (1L..7L).map(day::plusDays).first { it.dayOfWeek in weekdays }
         unit == RepeatUnit.WEEK && weekdays.toSet() == setOf(day.dayOfWeek) -> day.plusWeeks(every.toLong())
-        unit == RepeatUnit.MONTH -> {
-            val month = YearMonth.from(day).plusMonths(every.toLong())
-            when {
+        unit == RepeatUnit.MONTH || unit == RepeatUnit.YEAR -> {
+            val month = if (unit == RepeatUnit.MONTH) YearMonth.from(day).plusMonths(every.toLong())
+            else this.month?.let { YearMonth.of(day.year + every, it) }
+            if (month == null) null else when {
                 weekdayOrdinal != null -> weekdays.singleOrNull()?.takeIf { weekdayOrdinal in 1..4 }
                     ?.let { month.atDay(1).with(TemporalAdjusters.dayOfWeekInMonth(weekdayOrdinal, it)) }
                 monthDay == -1 -> month.atEndOfMonth()
@@ -88,9 +91,10 @@ data class RepeatRule(
         else -> null
     }
 
-    /** Whether [day] is one of this monthly rule's days: the app starts rules on their first occurrence. */
+    /** Whether [day] is one of this monthly or yearly rule's days: the app starts rules on their first occurrence. */
     fun fallsOn(day: LocalDate): Boolean = when {
-        unit != RepeatUnit.MONTH || afterCompletion -> false
+        (unit != RepeatUnit.MONTH && unit != RepeatUnit.YEAR) || afterCompletion -> false
+        unit == RepeatUnit.YEAR && month != day.month -> false
         weekdayOrdinal != null -> weekdays == listOf(day.dayOfWeek) && weekdayOrdinal == (day.dayOfMonth - 1) / 7 + 1
         monthDay == -1 -> day.dayOfMonth == day.lengthOfMonth()
         else -> monthDay == day.dayOfMonth

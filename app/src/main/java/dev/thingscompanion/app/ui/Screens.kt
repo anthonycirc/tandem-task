@@ -59,6 +59,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -753,10 +759,10 @@ private fun MoveDialog(library: ThingsLibrary, item: Task, onPick: (PendingChang
 }
 
 /**
- * How a to-do repeats, from the app: every N days, weeks or months, on a fixed schedule (weekly
- * on chosen days, monthly on the to-do's day of the month, its weekday's rank, or the last day)
- * or after completion. The rule starts on the to-do's day, [start], which a fixed schedule always
- * includes; years are set in Things.
+ * How a to-do repeats, from the app: every N days, weeks, months or years, on a fixed schedule
+ * (weekly on chosen days; monthly or yearly on the to-do's day, its weekday's rank, or the last
+ * day of its month) or after completion. The rule starts on the to-do's day, [start], which a
+ * fixed schedule always includes.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -770,16 +776,17 @@ private fun RepeatDialog(start: LocalDate, onPick: (RepeatRule) -> Unit, onDismi
     // Monthly: 0 on the day of the month, 1 on the weekday's rank, 2 on the last day.
     var monthPattern by rememberSaveable { mutableIntStateOf(0) }
     val weekly = unit == RepeatUnit.WEEK && !afterCompletion
-    val monthly = unit == RepeatUnit.MONTH && !afterCompletion
+    val monthly = (unit == RepeatUnit.MONTH || unit == RepeatUnit.YEAR) && !afterCompletion
+    val yearMonth = start.month.takeIf { unit == RepeatUnit.YEAR }
     val rank = (start.dayOfMonth - 1) / 7 + 1
     val isLastDay = start.dayOfMonth == start.lengthOfMonth()
     // Several days only every week: which week Things counts from is unknown.
     val chosen = if (every > 1) listOf(start.dayOfWeek.value) else days
     val rule = when {
         weekly -> RepeatRule(unit, every, false, weekdays = chosen.sorted().map(DayOfWeek::of))
-        monthly && monthPattern == 1 -> RepeatRule(unit, every, false, weekdays = listOf(start.dayOfWeek), weekdayOrdinal = rank)
-        monthly && monthPattern == 2 -> RepeatRule(unit, every, false, monthDay = -1)
-        monthly -> RepeatRule(unit, every, false, monthDay = start.dayOfMonth)
+        monthly && monthPattern == 1 -> RepeatRule(unit, every, false, weekdays = listOf(start.dayOfWeek), month = yearMonth, weekdayOrdinal = rank)
+        monthly && monthPattern == 2 -> RepeatRule(unit, every, false, monthDay = -1, month = yearMonth)
+        monthly -> RepeatRule(unit, every, false, monthDay = start.dayOfMonth, month = yearMonth)
         else -> RepeatRule(unit, every, afterCompletion)
     }
     AlertDialog(
@@ -787,10 +794,11 @@ private fun RepeatDialog(start: LocalDate, onPick: (RepeatRule) -> Unit, onDismi
         title = { Text(stringResource(R.string.repeat_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = unit == RepeatUnit.DAY, onClick = { unit = RepeatUnit.DAY }, label = { Text(stringResource(R.string.repeat_unit_days)) })
                     FilterChip(selected = unit == RepeatUnit.WEEK, onClick = { unit = RepeatUnit.WEEK }, label = { Text(stringResource(R.string.repeat_unit_weeks)) })
                     FilterChip(selected = unit == RepeatUnit.MONTH, onClick = { unit = RepeatUnit.MONTH }, label = { Text(stringResource(R.string.repeat_unit_months)) })
+                    FilterChip(selected = unit == RepeatUnit.YEAR, onClick = { unit = RepeatUnit.YEAR }, label = { Text(stringResource(R.string.repeat_unit_years)) })
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { if (every > 1) every-- }, enabled = every > 1) { Text("−") }
@@ -812,14 +820,18 @@ private fun RepeatDialog(start: LocalDate, onPick: (RepeatRule) -> Unit, onDismi
                 }
                 if (monthly) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(selected = monthPattern == 0, onClick = { monthPattern = 0 }, label = { Text(stringResource(R.string.repeat_pick_day, start.dayOfMonth)) })
+                        val ofMonth = yearMonth?.let { " " + ofMonth(context, it, locale) }.orEmpty()
+                        val dayLabel = if (yearMonth != null) {
+                            stringResource(R.string.repeat_pick_text, start.format(DateTimeFormatter.ofPattern(stringResource(R.string.repeat_month_day_pattern), locale)))
+                        } else stringResource(R.string.repeat_pick_day, start.dayOfMonth)
+                        FilterChip(selected = monthPattern == 0, onClick = { monthPattern = 0 }, label = { Text(dayLabel) })
                         // A fifth weekday is not in every month.
                         if (rank <= 4) FilterChip(
                             selected = monthPattern == 1,
                             onClick = { monthPattern = 1 },
-                            label = { Text(stringResource(R.string.repeat_pick_nth, ordinalName(context, rank), start.dayOfWeek.getDisplayName(TextStyle.FULL, locale))) },
+                            label = { Text(stringResource(R.string.repeat_pick_nth, ordinalName(context, rank), start.dayOfWeek.getDisplayName(TextStyle.FULL, locale)) + ofMonth) },
                         )
-                        if (isLastDay) FilterChip(selected = monthPattern == 2, onClick = { monthPattern = 2 }, label = { Text(stringResource(R.string.repeat_pick_last)) })
+                        if (isLastDay) FilterChip(selected = monthPattern == 2, onClick = { monthPattern = 2 }, label = { Text(stringResource(R.string.repeat_pick_last) + ofMonth) })
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1617,6 +1629,27 @@ private fun Fact(icon: @Composable () -> Unit, text: String, color: Color = Colo
     }
 }
 
+/** A read-only field naming the current choice, opening a menu of choices under it. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FilterDropdown(label: String, value: String, items: @Composable ColumnScope.(close: () -> Unit) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            items { expanded = false }
+        }
+    }
+}
+
 /** Show-completed option and display filters: tags (any), one project or area, one day. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1655,26 +1688,57 @@ private fun FilterDialog(library: ThingsLibrary, filter: TaskFilter, onChange: (
                 }
                 val tags = library.tags()
                 if (tags.isNotEmpty()) {
-                    Text(stringResource(R.string.tags), style = MaterialTheme.typography.labelLarge)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val chosen = tags.filter { it.id in filter.tagIds }
+                    FilterDropdown(
+                        label = stringResource(R.string.tags),
+                        value = chosen.joinToString(", ") { it.title }.ifEmpty { stringResource(R.string.filter_all) },
+                    ) { _ ->
+                        DropdownMenuItem(text = { Text(stringResource(R.string.filter_all)) }, onClick = { onChange(filter.copy(tagIds = emptySet())) })
+                        // Several tags can be chosen: the menu stays open.
                         tags.forEach { tag ->
                             val selected = tag.id in filter.tagIds
-                            FilterChip(
-                                selected = selected,
+                            DropdownMenuItem(
+                                text = { Text(tag.title) },
+                                leadingIcon = { Checkbox(checked = selected, onCheckedChange = null) },
                                 onClick = { onChange(filter.copy(tagIds = if (selected) filter.tagIds - tag.id else filter.tagIds + tag.id)) },
-                                label = { Text(tag.title) },
                             )
                         }
                     }
                 }
-                Text(stringResource(R.string.project_or_area), style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    (library.areas().map { it.id to it.title } + library.projects().map { it.id to it.title }).forEach { (id, title) ->
-                        val selected = filter.containerId == id
-                        FilterChip(
-                            selected = selected,
-                            onClick = { onChange(filter.copy(containerId = if (selected) null else id)) },
-                            label = { Text(title) },
+                val areas = library.areas()
+                val projects = library.projects()
+                val containerTitle = areas.firstOrNull { it.id == filter.containerId }?.title
+                    ?: projects.firstOrNull { it.id == filter.containerId }?.title
+                FilterDropdown(
+                    label = stringResource(R.string.project_or_area),
+                    value = containerTitle ?: stringResource(R.string.filter_all),
+                ) { close ->
+                    fun pick(id: String?) {
+                        onChange(filter.copy(containerId = id))
+                        close()
+                    }
+                    DropdownMenuItem(text = { Text(stringResource(R.string.filter_all)) }, onClick = { pick(null) })
+                    // Projects under their area, as the Projects list shows them; then those with no area.
+                    areas.forEach { area ->
+                        DropdownMenuItem(
+                            text = { Text(area.title, fontWeight = FontWeight.SemiBold) },
+                            leadingIcon = { ListIcon(ListKind.AREA, size = 18.dp) },
+                            onClick = { pick(area.id) },
+                        )
+                        projects.filter { it.areaId == area.id }.forEach { project ->
+                            DropdownMenuItem(
+                                text = { Text(project.title) },
+                                leadingIcon = { ListIcon(ListKind.PROJECT, size = 16.dp) },
+                                onClick = { pick(project.id) },
+                                contentPadding = PaddingValues(start = 32.dp, end = 12.dp),
+                            )
+                        }
+                    }
+                    projects.filter { project -> areas.none { it.id == project.areaId } }.forEach { project ->
+                        DropdownMenuItem(
+                            text = { Text(project.title) },
+                            leadingIcon = { ListIcon(ListKind.PROJECT, size = 16.dp) },
+                            onClick = { pick(project.id) },
                         )
                     }
                 }

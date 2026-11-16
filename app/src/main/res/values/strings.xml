@@ -162,7 +162,7 @@
     <string name="repeat_title">Repeat</string>
     <string name="repeat_unit_days">Days</string>
     <string name="repeat_unit_weeks">Weeks</string>
-    <string name="repeat_app_limits">Starts on the to-do\'s day. Yearly repeats are set in Things.</string>
+    <string name="repeat_app_limits">Starts on the to-do\'s day.</string>
     <string name="repeat_after_completion_toggle">After completion</string>
     <string name="repeat_unit_months">Months</string>
     <string name="repeat_on_nth">%1$s on the %2$s %3$s</string>
@@ -175,5 +175,10 @@
     <string name="repeat_pick_day">On day %1$d</string>
     <string name="repeat_pick_nth">On the %1$s %2$s</string>
     <string name="repeat_pick_last">On the last day</string>
+    <string name="filter_all">All</string>
+    <string name="repeat_unit_years">Years</string>
+    <string name="repeat_of_month">of %1$s</string>
+    <string name="repeat_of_month_vowel">of %1$s</string>
+    <string name="repeat_pick_text">On %1$s</string>
     <string name="now_repeats">Now repeats</string>
 </resources>

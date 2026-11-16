@@ -2,6 +2,18 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.5] - 2026-11-16
+
+### Added
+
+- **Yearly repeats.** The repeat button now also sets "every N years": on the to-do's date, on its weekday's rank in its month ("the third Monday of November"), on the last day of its month, or after completion, written as Things 3 writes it.
+- **Check off yearly "repeat after completion" to-dos**: every repeating to-do can now be checked from the app.
+
+### Changed
+
+- **Filters**: tags and the project or area are picked from drop-down menus (projects under their area) instead of long rows of chips.
+- Yearly rules on a weekday's rank or the last day now name their month.
+
 ## [0.3.4] - 2026-11-16
 
 ### Added

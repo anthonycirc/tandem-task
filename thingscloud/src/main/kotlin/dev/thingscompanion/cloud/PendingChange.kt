@@ -9,6 +9,7 @@ import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.Month
 
 /**
  * A change made on the phone and kept until Things Cloud has it. Each one states the end result
@@ -321,12 +322,14 @@ sealed interface PendingChange {
         val weekdays: List<Int> = emptyList(),
         val monthDay: Int? = null,
         val weekdayOrdinal: Int? = null,
+        /** 1 January .. 12 December, for a yearly rule. */
+        val month: Int? = null,
     ) : PendingChange {
         override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
             val task = library.task(taskId) ?: throw NoSuchElementException("The to-do no longer exists.")
             if (templateId in task.recurrenceTemplateIds) return null
             require(library.canMakeRepeating(task)) { "This to-do can't be made to repeat from the app." }
-            val rule = RepeatRule(unit, every, afterCompletion, weekdays.map(DayOfWeek::of), monthDay = monthDay, weekdayOrdinal = weekdayOrdinal)
+            val rule = RepeatRule(unit, every, afterCompletion, weekdays.map(DayOfWeek::of), monthDay = monthDay, month = month?.let(Month::of), weekdayOrdinal = weekdayOrdinal)
             require(TaskEdits.canWriteRule(rule, task.startDate!!)) { "This repeat can't be set from the app yet." }
             val checklist = library.checklist(taskId)
             require(checklist.size <= checklistIds.size) { "The checklist changed; try again." }
@@ -335,7 +338,7 @@ sealed interface PendingChange {
 
         companion object {
             operator fun invoke(opId: String, taskId: String, templateId: String, rule: RepeatRule, checklistIds: List<String>) =
-                MakeRepeating(opId, taskId, templateId, rule.unit, rule.every, rule.afterCompletion, checklistIds, rule.weekdays.map { it.value }, rule.monthDay, rule.weekdayOrdinal)
+                MakeRepeating(opId, taskId, templateId, rule.unit, rule.every, rule.afterCompletion, checklistIds, rule.weekdays.map { it.value }, rule.monthDay, rule.weekdayOrdinal, rule.month?.value)
         }
     }
 
