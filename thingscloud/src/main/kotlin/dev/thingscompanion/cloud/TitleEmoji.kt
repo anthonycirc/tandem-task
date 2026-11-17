@@ -2,10 +2,18 @@ package dev.thingscompanion.cloud
 
 /** An emoji in front of a to-do's title: Things keeps it in the title itself. */
 object TitleEmoji {
-    /** Emoji, with their variation selectors, skin tones and zero-width joins, at the start of a title. */
-    private val LEADING = Regex("""^(?:\p{So}|\p{Cs}{2})(?:[️‍\x{1F3FB}-\x{1F3FF}]|\p{So}|\p{Cs}{2})*""")
+    /**
+     * An emoji at the start of a title: a pictograph (U+1F000 and up) or a symbol in emoji
+     * presentation (followed by U+FE0F), with skin tones and zero-width joins. A plain symbol such
+     * as an arrow or a star stays part of the title.
+     */
+    private val LEADING = Regex(
+        """^(?:[\x{1F000}-\x{1FAFF}][\x{1F3FB}-\x{1F3FF}]?\uFE0F?|\p{So}\uFE0F)""" +
+            """(?:\u200D(?:[\x{1F000}-\x{1FAFF}]|\p{So})\uFE0F?[\x{1F3FB}-\x{1F3FF}]?)*""",
+    )
 
-    fun leading(title: String): String? = LEADING.find(title)?.value?.takeIf { it.isNotEmpty() }
+    fun leading(title: String): String? =
+        CHOICES.filter { title.startsWith(it) }.maxByOrNull { it.length } ?: LEADING.find(title)?.value
 
     /** [title] led by [emoji] instead of the one it had; null takes it off. */
     fun apply(title: String, emoji: String?): String {

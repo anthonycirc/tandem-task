@@ -27,4 +27,13 @@ class TitleEmojiTest {
         assertNull(TitleEmoji.leading("Call Ana"))
         assertNull(TitleEmoji.leading("2 calls"))
     }
+
+    @Test
+    fun `a leading symbol that is not an emoji stays part of the title`() {
+        assertNull(TitleEmoji.leading("→ Next step"))
+        assertNull(TitleEmoji.leading("© 2026 notice"))
+        assertNull(TitleEmoji.leading("★ Starred"))
+        assertEquals("📞 → Next step", TitleEmoji.apply("→ Next step", "📞"))
+        assertEquals("→ Next step", TitleEmoji.apply("→ Next step", null))
+    }
 }

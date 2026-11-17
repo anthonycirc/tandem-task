@@ -171,6 +171,7 @@ class ListWidget : GlanceAppWidget() {
 
         private fun configure(context: Context, appWidgetId: Int): Intent =
             Intent(context, WidgetConfigActivity::class.java).apply {
+                // Its own task (see the manifest): the app's open screens stay as they were.
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                 action = "dev.thingscompanion.CONFIGURE:$appWidgetId"
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)

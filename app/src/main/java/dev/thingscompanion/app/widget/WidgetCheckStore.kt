@@ -7,7 +7,8 @@ import dev.thingscompanion.cloud.WidgetChecks
 object WidgetCheckStore {
     private const val FILE = "widget_checks"
     private const val KEY = "ticks"
-    private const val MAX_AGE_MS = 30_000L
+    // Long enough for WorkManager to run a delayed send; a tick older than this was lost.
+    private const val MAX_AGE_MS = 15 * 60_000L
     private val lock = Any()
 
     /** Ticks still waiting for their delay; one left by a send cut short expires. */

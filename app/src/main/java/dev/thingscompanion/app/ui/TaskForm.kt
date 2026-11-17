@@ -141,6 +141,16 @@ fun TaskFormScreen(
     var notes by rememberSaveable { mutableStateOf(initial.notes) }
     val checklist = rememberSaveable(saver = checklistSaver) { initial.checklist.toMutableStateList() }
     var whenChoice by rememberSaveable { mutableStateOf(WhenChoice.of(initial.schedule)) }
+    // Moving the new to-do in or out of a project or area: the Inbox and Anytime follow, as in
+    // Things (a filed to-do is never in the Inbox; one taken out of its project goes back there).
+    var wasInboxAllowed by rememberSaveable { mutableStateOf(allowInbox) }
+    LaunchedEffect(allowInbox) {
+        if (allowInbox != wasInboxAllowed) {
+            if (!allowInbox && whenChoice == WhenChoice.INBOX) whenChoice = WhenChoice.ANYTIME
+            if (allowInbox && whenChoice == WhenChoice.ANYTIME) whenChoice = WhenChoice.INBOX
+            wasInboxAllowed = allowInbox
+        }
+    }
     // The day of the initial schedule: kept when the choice is unchanged (an overdue to-do stays on its day).
     var pickedDay by rememberSaveable { mutableStateOf(initial.schedule.date?.toEpochDay()) }
     var pickingDate by remember { mutableStateOf(false) }

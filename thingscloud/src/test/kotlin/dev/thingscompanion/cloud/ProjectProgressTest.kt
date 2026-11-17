@@ -31,4 +31,14 @@ class ProjectProgressTest {
         val lib = library("""{"p": {"t": 0, "e": "Task7", "p": {"tt": "Move", "tp": 1, "st": 1}}}""")
         assertEquals(0f, lib.projectProgress("p"))
     }
+
+    @Test
+    fun `a repeating to-do's template is not counted, only its occurrences`() {
+        val lib = library("""{
+            "p": {"t": 0, "e": "Task7", "p": {"tt": "Move", "tp": 1, "st": 1}},
+            "tmpl": {"t": 0, "e": "Task7", "p": {"tt": "Water", "st": 2, "pr": ["p"], "rr": {"tp": 1, "fu": 16, "fa": 1}}},
+            "done": {"t": 0, "e": "Task7", "p": {"tt": "Water", "st": 1, "pr": ["p"], "rt": ["tmpl"], "ss": 3, "sp": 1}}
+        }""")
+        assertEquals(1f, lib.projectProgress("p"))
+    }
 }
