@@ -34,4 +34,13 @@ class WidgetChecksTest {
         assertEquals(checks, WidgetChecks.decode(checks.encode()))
         assertEquals(WidgetChecks(), WidgetChecks.decode(setOf("garbage", "x:y")))
     }
+
+    @Test
+    fun `a tick older than the display limit still holds for its send, and is only pruned after a day`() {
+        val checks = WidgetChecks().toggle("a", 1_000)
+        val muchLater = 1_000 + 60 * 60_000L
+        assertFalse(checks.freshAt(muchLater, maxAgeMillis = 15 * 60_000L).isTicked("a"))
+        assertTrue(checks.prunedAt(muchLater).stillTicked("a", 1_000))
+        assertFalse(checks.prunedAt(1_000 + 25 * 60 * 60_000L).isTicked("a"))
+    }
 }

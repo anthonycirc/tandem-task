@@ -266,7 +266,8 @@ class ThingsLibrary private constructor(
     /** The share of a project's to-dos done (completed or cancelled), 0 to 1, for its filling circle; repeating templates are not to-dos. */
     fun projectProgress(projectId: String): Float {
         val all = tasks.values.filter {
-            it.isTodo && it.projectId == projectId && !it.trashed && it.isCurrentEntity && !it.isRecurrenceTemplate && it.title.isNotBlank()
+            it.isTodo && it.projectId == projectId && !it.trashed && !it.inTrashedContainer && it.isCurrentEntity &&
+                !it.isRecurrenceTemplate && it.title.isNotBlank()
         }
         return if (all.isEmpty()) 0f else all.count { !it.isOpen }.toFloat() / all.size
     }

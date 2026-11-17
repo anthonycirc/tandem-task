@@ -450,6 +450,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     if (searching && library != null) {
         SearchScreen(
             library = library,
+            snackbar = snackbar,
             query = query,
             onQuery = { query = it },
             actions = RowActions(
@@ -460,7 +461,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 onSetDone = viewModel::setDone,
                 onTrash = viewModel::trash,
                 onRestore = viewModel::restore,
-                onReschedule = {},
+                onReschedule = { schedulingId = it.id },
             ),
             onOpenArea = {
                 searching = false
@@ -468,6 +469,17 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
             },
             onDismiss = { searching = false },
         )
+        // A swipe to the left on a result reschedules it, as in the lists.
+        schedulingId?.let { library.task(it) }?.let { found ->
+            WhenDialog(
+                task = found,
+                onPick = {
+                    schedulingId = null
+                    viewModel.reschedule(found.id, it)
+                },
+                onDismiss = { schedulingId = null },
+            )
+        }
         return
     }
 
@@ -877,6 +889,7 @@ private fun pullToSearch(onPull: () -> Unit): NestedScrollConnection {
 @Composable
 private fun SearchScreen(
     library: ThingsLibrary,
+    snackbar: SnackbarHostState,
     query: String,
     onQuery: (String) -> Unit,
     actions: RowActions,
@@ -888,6 +901,7 @@ private fun SearchScreen(
     LaunchedEffect(Unit) { focus.requestFocus() }
     val result = remember(library, query) { library.search(query) }
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 navigationIcon = {
@@ -933,7 +947,15 @@ private fun SearchScreen(
                 }
             }
             items(result.tasks, key = { it.id }) { task ->
-                if (task.type == TaskType.PROJECT) ProjectRow(library, task, actions.onOpen) else TaskRow(library, task, actions, showWhen = true)
+                // The same swipes as in the lists: left reschedules, right moves to the Trash.
+                SwipeActions(
+                    canReschedule = task.type == TaskType.TODO && library.canReschedule(task) && task.isOpen,
+                    canTrash = library.canTrash(task),
+                    onReschedule = { actions.onReschedule(task) },
+                    onTrash = { actions.onTrash(task.id) },
+                ) {
+                    if (task.type == TaskType.PROJECT) ProjectRow(library, task, actions.onOpen) else TaskRow(library, task, actions, showWhen = true)
+                }
             }
         }
     }

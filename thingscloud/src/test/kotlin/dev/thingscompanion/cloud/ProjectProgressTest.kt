@@ -41,4 +41,15 @@ class ProjectProgressTest {
         }""")
         assertEquals(1f, lib.projectProgress("p"))
     }
+
+    @Test
+    fun `to-dos under a heading in the Trash are not counted`() {
+        val lib = library("""{
+            "p": {"t": 0, "e": "Task7", "p": {"tt": "Move", "tp": 1, "st": 1}},
+            "h": {"t": 0, "e": "Task7", "p": {"tt": "Old phase", "tp": 2, "st": 1, "pr": ["p"], "tr": true}},
+            "gone": {"t": 0, "e": "Task7", "p": {"tt": "A", "st": 1, "agr": ["h"]}},
+            "done": {"t": 0, "e": "Task7", "p": {"tt": "B", "st": 1, "pr": ["p"], "ss": 3, "sp": 1}}
+        }""")
+        assertEquals(1f, lib.projectProgress("p"))
+    }
 }

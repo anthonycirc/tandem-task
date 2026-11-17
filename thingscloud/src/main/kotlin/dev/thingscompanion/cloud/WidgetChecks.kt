@@ -20,9 +20,17 @@ data class WidgetChecks(val ticks: Map<String, Long> = emptyMap()) {
     fun freshAt(nowMillis: Long, maxAgeMillis: Long): WidgetChecks =
         WidgetChecks(ticks.filterValues { nowMillis - it <= maxAgeMillis })
 
+    /**
+     * Drops ticks a day old: their send never ran. Younger ones still hold for their send, however
+     * late WorkManager runs it, even once the widget stopped showing them ([freshAt]).
+     */
+    fun prunedAt(nowMillis: Long): WidgetChecks = freshAt(nowMillis, PRUNE_AFTER_MILLIS)
+
     fun encode(): Set<String> = ticks.map { (id, token) -> "$token:$id" }.toSet()
 
     companion object {
+        private const val PRUNE_AFTER_MILLIS = 24 * 60 * 60_000L
+
         fun decode(stored: Set<String>): WidgetChecks = WidgetChecks(
             stored.mapNotNull { entry ->
                 val token = entry.substringBefore(':', "").toLongOrNull() ?: return@mapNotNull null

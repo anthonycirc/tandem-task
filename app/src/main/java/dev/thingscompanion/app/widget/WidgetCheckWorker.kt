@@ -29,19 +29,19 @@ class WidgetCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
         val (before, _) = WidgetCheckStore.update(context) { if (it.stillTicked(id, token)) it.without(id) else it }
         if (!before.stillTicked(id, token)) return Result.success()
 
-        val shown = readWidgetSnapshot(context)
-        shown?.let { writeWidgetSnapshot(context, it.without(id)) }
-        ListWidget.refreshAll(context)
-
         val repository = ThingsRepository(context)
         val library = repository.cached()?.library
-        // Demo lists, or a to-do gone or no longer checkable since the widget was drawn: show it again, send nothing.
+        // Demo lists, or a to-do gone or no longer checkable since the widget was drawn: it stays
+        // listed, unticked, and nothing is sent.
         val task = library?.task(id)?.takeIf(library::canComplete)
         if (task == null) {
-            shown?.let { writeWidgetSnapshot(context, it) }
             ListWidget.refreshAll(context)
             return Result.success()
         }
+        WidgetCheckStore.editSnapshot {
+            readWidgetSnapshot(context)?.let { writeWidgetSnapshot(context, it.without(id)) }
+        }
+        ListWidget.refreshAll(context)
         repository.enqueue(PendingChange.SetDone(ThingsIds.random(), task.id, true, day = ThingsDay.today().toEpochDay()))
         BackgroundSync.sendSoon(context)
         return Result.success()

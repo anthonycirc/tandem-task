@@ -2,6 +2,17 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.8] - 2026-11-17
+
+### Added
+
+- **Swipes in search results**: left reschedules, right moves to the Trash.
+
+### Fixed
+
+- A widget check is no longer lost when Android runs its send late, and two checks sent together no longer undo each other.
+- A project's progress no longer counts to-dos under a heading in the Trash.
+
 ## [0.3.7] - 2026-11-17
 
 ### Added
