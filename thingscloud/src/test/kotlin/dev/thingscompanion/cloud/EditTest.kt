@@ -100,7 +100,9 @@ class EditTest {
         assertFalse(lib.canComplete(lib.task("afterI")!!))
         assertFalse(lib.canComplete(lib.task("fixedT")!!))
         assertTrue(lib.canReschedule(lib.task("plain")!!))
-        assertFalse(lib.canReschedule(lib.task("fixedI")!!))
+        // An occurrence can be rescheduled (S7, 2026-11-17), but not into the Inbox.
+        assertTrue(lib.canReschedule(lib.task("fixedI")!!))
+        assertFalse(lib.canReschedule(lib.task("fixedT")!!))
         assertFailsWith<IllegalArgumentException> {
             TaskEdits.edit(lib.task("fixedI")!!, "Water", "", Schedule.Inbox, null, now)
         }

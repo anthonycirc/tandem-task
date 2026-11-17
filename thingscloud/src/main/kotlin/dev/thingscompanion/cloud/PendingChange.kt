@@ -374,14 +374,31 @@ sealed interface PendingChange {
 
     @Serializable
     @SerialName("trash")
-    data class SetTrashed(override val opId: String, val taskId: String, val trashed: Boolean) : PendingChange {
+    data class SetTrashed(
+        override val opId: String,
+        val taskId: String,
+        val trashed: Boolean,
+        /** The local day of the tap (epoch day): trashing an "after completion" occurrence counts from it. */
+        val day: Long? = null,
+    ) : PendingChange {
         override val replaces get() = "trash:$taskId"
 
         override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
             val task = library.task(taskId) ?: throw NoSuchElementException("The to-do no longer exists.")
             if (task.trashed == trashed) return null
             require(if (trashed) library.canTrash(task) else library.canRestore(task)) { "This to-do can't be moved from the app." }
-            return mapOf(taskId to TaskEdits.setTrashed(task, trashed, now))
+            val change = mapOf(taskId to TaskEdits.setTrashed(task, trashed, now))
+            // An open "after completion" occurrence: Things moves its template on when it goes to the
+            // Trash, as when it is checked, and clears the template's dates when it comes back.
+            if (!task.isOpen) return change
+            val (template, rule) = library.afterCompletionRule(task) ?: return change
+            val templateChange = if (trashed) {
+                val on = day?.let(LocalDate::ofEpochDay) ?: ThingsDay.today(Instant.ofEpochMilli((now * 1000).toLong()))
+                TaskEdits.afterCompletion(template, rule, on)
+            } else {
+                TaskEdits.clearAfterCompletion(template)
+            }
+            return change + (template.id to templateChange)
         }
     }
 

@@ -129,7 +129,7 @@ class ThingsLibrary private constructor(
     /** Same to-dos as check-off: moving a repeating template or an "after completion" repeat to the Trash is left to Things. */
     // An "after completion" instance is checkable, but trashing one is left to Things.
     fun canTrash(task: Task): Boolean =
-        (canComplete(task) && afterCompletionRule(task) == null) || canEditProject(task) || canTrashHeading(task)
+        canComplete(task) || canEditProject(task) || canTrashHeading(task)
 
     /** A heading of a project the app may change; it goes to the Trash with its to-dos. */
     private fun canTrashHeading(task: Task): Boolean =
@@ -253,10 +253,11 @@ class ThingsLibrary private constructor(
     fun canReorder(task: Task): Boolean = !task.trashed && task.isCurrentEntity && !task.isRecurrenceTemplate
 
     /** Whether the deadline of this to-do or project can be set from the app. */
-    fun canSetDeadline(task: Task): Boolean = (task.isTodo && canReschedule(task)) || canEditProject(task)
+    fun canSetDeadline(task: Task): Boolean = (task.isTodo && canReschedule(task) && !task.isRepeating) || canEditProject(task)
 
     /** When and reminder of repeating to-dos stay as Things manages them. */
-    fun canReschedule(task: Task): Boolean = task.type == TaskType.TODO && !task.trashed && !task.isRepeating
+    /** A to-do, a repeating to-do's occurrence included (Things moves it alone); not a repeating template. */
+    fun canReschedule(task: Task): Boolean = task.type == TaskType.TODO && !task.trashed && !task.isRecurrenceTemplate
 
     /** Open dated to-dos that carry a reminder time. */
     fun withReminders(): List<Task> = visible { it.isTodo && it.startDate != null && it.reminder != null }

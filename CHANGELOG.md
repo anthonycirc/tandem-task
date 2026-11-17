@@ -2,6 +2,12 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.10] - 2026-11-17
+
+### Added
+
+- **Swipe repeating to-dos.** An "after completion" occurrence can now be swiped to the Trash: like a check, its next date moves on, and Undo or Restore puts it back, as in Things. Any occurrence can be swiped to another day on its own; the repeat rule is untouched.
+
 ## [0.3.9] - 2026-11-17
 
 ### Added

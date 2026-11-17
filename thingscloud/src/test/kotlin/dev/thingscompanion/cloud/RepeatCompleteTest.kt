@@ -80,10 +80,11 @@ class RepeatCompleteTest {
     }
 
     @Test
-    fun `an after-completion instance can be checked but not trashed from the app`() {
+    fun `an after-completion instance can be checked and trashed from the app`() {
         val lib = library("""{"tp": 1, "fu": 16, "fa": 1}""")
         assertTrue(lib.canComplete(lib.task("inst")!!))
-        assertFalse(lib.canTrash(lib.task("inst")!!))
+        // Trashing moves its template on, as Things does (S6, 2026-11-17; RepeatSwipeTest).
+        assertTrue(lib.canTrash(lib.task("inst")!!))
     }
 
     @Test

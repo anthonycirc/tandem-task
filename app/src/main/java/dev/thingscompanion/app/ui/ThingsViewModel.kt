@@ -345,7 +345,7 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Moves the to-do to the Trash; the snackbar offers to put it back. */
     fun trash(id: String) = change(
-        PendingChange.SetTrashed(newId(), id, true),
+        PendingChange.SetTrashed(newId(), id, true, day = ThingsDay.today().toEpochDay()),
         done = R.string.moved_to_trash,
         undo = PendingChange.SetTrashed(newId(), id, false),
     )

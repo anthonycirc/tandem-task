@@ -34,7 +34,13 @@ object TaskEdits {
 
         val scheduleChanged = schedule.start != task.start || schedule.date != task.startDate ||
             schedule.evening != task.evening || reminder != task.reminder
-        require(!scheduleChanged || !task.isRepeating) { "When and reminder of a repeating to-do can't be changed here." }
+        // An occurrence of a repeating to-do moves alone, as in Things ({sr, st, tir}); its template,
+        // its reminder and the Inbox stay as Things manages them.
+        if (scheduleChanged && task.isRepeating) {
+            require(!task.isRecurrenceTemplate && reminder == task.reminder && schedule.start != StartList.INBOX) {
+                "When and reminder of a repeating to-do can't be changed here."
+            }
+        }
 
         val changes = linkedMapOf<String, JsonElement>()
         if (newTitle != task.title) changes["tt"] = JsonPrimitive(newTitle)
@@ -71,6 +77,16 @@ object TaskEdits {
                 put("tir", midnight(next))
             })
         }
+    }
+
+    /** An "after completion" template once its occurrence is restored from the Trash: no dates, as Things writes it. */
+    fun clearAfterCompletion(template: Task): JsonObject = buildJsonObject {
+        put("t", 1)
+        put("e", template.entity)
+        put("p", buildJsonObject {
+            put("acrd", JsonNull)
+            put("tir", JsonNull)
+        })
     }
 
     /**
