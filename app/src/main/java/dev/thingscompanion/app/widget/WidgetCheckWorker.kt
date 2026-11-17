@@ -51,13 +51,17 @@ class WidgetCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
         private const val TASK_ID = "task_id"
         private const val TOKEN = "token"
 
-        /** Sends the tick of [id] made by the tap [token] after [delayMillis]; a later tap on it replaces this one. */
+        /**
+         * Sends the tick of [id] made by the tap [token] after [delayMillis]. Each tap has its own
+         * work, never cancelled by a later tap (one could be mid-send): only the work of the tap
+         * that still holds the tick sends it.
+         */
         fun schedule(context: Context, id: String, token: Long, delayMillis: Long) {
             val request = OneTimeWorkRequestBuilder<WidgetCheckWorker>()
                 .setInitialDelay(delayMillis, TimeUnit.MILLISECONDS)
                 .setInputData(workDataOf(TASK_ID to id, TOKEN to token))
                 .build()
-            WorkManager.getInstance(context).enqueueUniqueWork("widget_check_$id", ExistingWorkPolicy.REPLACE, request)
+            WorkManager.getInstance(context).enqueueUniqueWork("widget_check_${id}_$token", ExistingWorkPolicy.KEEP, request)
         }
     }
 }
