@@ -2,6 +2,26 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Search.** Pull a list down past its top, or tap the magnifier, to find to-dos, projects and areas by title or notes, ignoring case and accents. Open items come first.
+- **Project progress.** A project's circle fills with the share of its to-dos that are done, as in Things.
+- **Pick the project or area when adding a to-do.** The new to-do form has a "Project or area" field.
+- **The + button**: a tap adds a to-do (in Projects, a project; in Areas, an area), a long press offers every choice, such as a heading in a project.
+- **Emoji in titles.** The title field has an emoji button that puts an emoji in front of the title, or takes it off.
+- **Delete a heading from its dialog.** Tapping a heading offers Delete next to Rename (a swipe to the right still works).
+- **Widget**: a checked to-do stays shown, ticked, for 3 seconds, so a second tap takes a mistake back. A ⋯ button on the widget opens its settings, which now include a background color.
+
+### Fixed
+
+- **Things for Mac crashing on sync.** A to-do moved into an area from an older version of Things (which Things no longer has) made Things for Mac quit on every sync. Such areas, and old tags, are now hidden, and a to-do can no longer be filed in an area that does not exist.
+
+### Changed
+
+- Tags are listed in Things' own tag order, in the filters and on to-dos.
+
 ## [0.3.6] - 2026-11-16
 
 ### Added

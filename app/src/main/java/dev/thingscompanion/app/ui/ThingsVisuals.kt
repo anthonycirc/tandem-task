@@ -50,9 +50,9 @@ object ListColors {
 
 enum class ListKind { INBOX, TODAY, UPCOMING, ANYTIME, SOMEDAY, PROJECT, AREA, TRASH, EVENING }
 
-/** The icon of a list, drawn in its colour. */
+/** The icon of a list, drawn in its colour; a project's circle fills with its [progress], 0 to 1. */
 @Composable
-fun ListIcon(kind: ListKind, modifier: Modifier = Modifier, size: Dp = 22.dp) {
+fun ListIcon(kind: ListKind, modifier: Modifier = Modifier, size: Dp = 22.dp, progress: Float = 0f) {
     when (kind) {
         ListKind.TODAY -> Icon(Icons.Filled.Star, null, modifier.size(size), tint = ListColors.today)
         ListKind.UPCOMING -> Icon(Icons.Filled.DateRange, null, modifier.size(size), tint = ListColors.upcoming)
@@ -89,7 +89,21 @@ fun ListIcon(kind: ListKind, modifier: Modifier = Modifier, size: Dp = 22.dp) {
                     drawRoundRect(c, Offset(w * 0.18f, w * 0.42f), Size(w * 0.64f, w * 0.42f), CornerRadius(w * 0.06f), style = stroke)
                     drawLine(c, Offset(w * 0.4f, w * 0.56f), Offset(w * 0.6f, w * 0.56f), strokeWidth = w * 0.09f, cap = StrokeCap.Round)
                 }
-                ListKind.PROJECT -> drawCircle(ListColors.project, radius = w * 0.36f, style = stroke)
+                ListKind.PROJECT -> {
+                    drawCircle(ListColors.project, radius = w * 0.36f, style = stroke)
+                    // The done share as a pie inside the ring, from twelve o'clock, as in Things.
+                    if (progress > 0f) {
+                        val r = w * 0.24f
+                        drawArc(
+                            ListColors.project,
+                            startAngle = -90f,
+                            sweepAngle = 360f * progress.coerceAtMost(1f),
+                            useCenter = true,
+                            topLeft = Offset(w / 2 - r, w / 2 - r),
+                            size = Size(r * 2, r * 2),
+                        )
+                    }
+                }
                 ListKind.AREA -> {
                     // A cube, as Things marks areas.
                     val c = ListColors.area

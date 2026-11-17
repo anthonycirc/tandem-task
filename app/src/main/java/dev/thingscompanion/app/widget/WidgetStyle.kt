@@ -13,14 +13,26 @@ enum class WidgetTheme(@StringRes val label: Int) {
     DARK(R.string.theme_dark),
 }
 
-/** The colors a widget draws with, for its theme and background opacity (0..100 %). */
-class WidgetColors(theme: WidgetTheme, opacityPercent: Int) {
-    private val alpha = opacityPercent.coerceIn(0, 100) / 100f
+/** A widget's background colour: the theme's own, or a colour with white text over it. */
+enum class WidgetColor(@StringRes val label: Int, val background: Color?) {
+    DEFAULT(R.string.widget_color_default, null),
+    BLUE(R.string.widget_color_blue, Color(0xFF2F5BB7)),
+    GREEN(R.string.widget_color_green, Color(0xFF3C7D4F)),
+    PURPLE(R.string.widget_color_purple, Color(0xFF6B4BA8)),
+    RED(R.string.widget_color_red, Color(0xFFB3403A)),
+    ORANGE(R.string.widget_color_orange, Color(0xFFC0661F)),
+    GREY(R.string.widget_color_grey, Color(0xFF4A4D55)),
+}
 
-    val background = pick(theme, LIGHT_BACKGROUND.copy(alpha = alpha), DARK_BACKGROUND.copy(alpha = alpha))
-    val text = pick(theme, LIGHT_TEXT, DARK_TEXT)
-    val secondary = pick(theme, LIGHT_SECONDARY, DARK_SECONDARY)
-    val accent = pick(theme, LIGHT_ACCENT, DARK_ACCENT)
+/** The colors a widget draws with, for its theme, colour and background opacity (0..100 %). */
+class WidgetColors(theme: WidgetTheme, opacityPercent: Int, color: WidgetColor = WidgetColor.DEFAULT) {
+    private val alpha = opacityPercent.coerceIn(0, 100) / 100f
+    private val tint = color.background
+
+    val background = if (tint != null) ColorProvider(tint.copy(alpha = alpha)) else pick(theme, LIGHT_BACKGROUND.copy(alpha = alpha), DARK_BACKGROUND.copy(alpha = alpha))
+    val text = if (tint != null) ColorProvider(Color.White) else pick(theme, LIGHT_TEXT, DARK_TEXT)
+    val secondary = if (tint != null) ColorProvider(Color.White.copy(alpha = 0.75f)) else pick(theme, LIGHT_SECONDARY, DARK_SECONDARY)
+    val accent = if (tint != null) ColorProvider(Color.White) else pick(theme, LIGHT_ACCENT, DARK_ACCENT)
 
     private fun pick(theme: WidgetTheme, light: Color, dark: Color): androidx.glance.unit.ColorProvider = when (theme) {
         WidgetTheme.SYSTEM -> ColorProvider(day = light, night = dark)

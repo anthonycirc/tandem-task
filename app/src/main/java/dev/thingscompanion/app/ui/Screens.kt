@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.semantics.semantics
@@ -69,7 +70,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -103,6 +103,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.material3.Surface
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
@@ -222,22 +235,52 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     var movingId by rememberSaveable { mutableStateOf<String?>(null) }
     var repeatingId by rememberSaveable { mutableStateOf<String?>(null) }
     var deletingAreaId by rememberSaveable { mutableStateOf<String?>(null) }
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
     // To-dos to delete for good, frozen when asked: the confirmation sends exactly these.
     var deletingForever by rememberSaveable { mutableStateOf<List<String>?>(null) }
+    // Where a new to-do goes: the project or area it is added from, or one picked in the form.
+    var placeProjectId by rememberSaveable { mutableStateOf<String?>(null) }
+    var placeAreaId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pickingPlace by remember { mutableStateOf(false) }
+    fun startAdding() {
+        placeProjectId = projectId?.takeIf { library?.task(it) != null }
+        placeAreaId = areaId?.takeIf { placeProjectId == null && library?.area(it) != null }
+        adding = true
+    }
 
     // A widget tap asked to open the add form or a to-do.
     LaunchedEffect(state.launchOpenAdd, state.launchTaskId) {
-        if (state.launchOpenAdd) adding = true
+        if (state.launchOpenAdd) startAdding()
         if (state.launchTaskId != null) taskId = state.launchTaskId
         if (state.launchOpenAdd || state.launchTaskId != null) viewModel.consumeLaunch()
     }
 
     // The forms take the whole screen: Save stays in the top bar, above the keyboard.
     // Added from a project or an area, the to-do is filed there.
-    val addInProject = projectId?.takeIf { library?.task(it) != null }
-    val addInArea = areaId?.takeIf { addInProject == null && library?.area(it) != null }
+    val addInProject = placeProjectId?.takeIf { library?.task(it) != null }
+    val addInArea = placeAreaId?.takeIf { addInProject == null && library?.area(it) != null }
     if (adding) {
         val filed = addInProject != null || addInArea != null
+        if (pickingPlace && library != null) {
+            PlaceDialog(
+                library = library,
+                isProject = false,
+                current = when {
+                    addInProject != null -> PendingChange.Destination(projectId = addInProject)
+                    addInArea != null -> PendingChange.Destination(areaId = addInArea)
+                    else -> PendingChange.Destination(inbox = true)
+                },
+                title = R.string.place_label,
+                headings = false,
+                onPick = {
+                    pickingPlace = false
+                    placeProjectId = it.projectId
+                    placeAreaId = it.areaId
+                },
+                onDismiss = { pickingPlace = false },
+            )
+        }
         TaskFormScreen(
             initial = TaskDraft(
                 schedule = when {
@@ -252,9 +295,17 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
             allowInbox = !filed,
             allowChecklist = true,
             allowDeadline = true,
+            place = when {
+                addInProject != null -> ListKind.PROJECT to library?.task(addInProject)?.title.orEmpty()
+                addInArea != null -> ListKind.AREA to library?.area(addInArea)?.title.orEmpty()
+                else -> ListKind.INBOX to stringResource(R.string.list_inbox)
+            },
+            onPickPlace = { pickingPlace = true },
             onSubmit = { title, notes, schedule, reminder, checklist, deadline ->
                 adding = false
-                viewModel.addTask(title, notes, schedule, reminder, checklist, deadline, projectId = addInProject, areaId = addInArea)
+                // A to-do filed in a project or area is never in the Inbox.
+                val filedSchedule = if (filed && schedule == Schedule.Inbox) Schedule.Anytime else schedule
+                viewModel.addTask(title, notes, filedSchedule, reminder, checklist, deadline, projectId = addInProject, areaId = addInArea)
             },
             onDismiss = { adding = false },
         )
@@ -343,6 +394,12 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 request.onName(name)
             },
             onDismiss = { naming = null },
+            onDelete = request.onDelete?.let { delete ->
+                {
+                    naming = null
+                    delete()
+                }
+            },
         )
     }
     val edited = editingId?.let { library?.task(it) }
@@ -386,6 +443,30 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 viewModel.editTask(edited.id, title, notes, schedule, reminder, checklist.takeIf { library.canEditChecklist(edited) }, deadline)
             },
             onDismiss = { editingId = null },
+        )
+        return
+    }
+
+    if (searching && library != null) {
+        SearchScreen(
+            library = library,
+            query = query,
+            onQuery = { query = it },
+            actions = RowActions(
+                onOpen = {
+                    searching = false
+                    if (it.type == TaskType.PROJECT) projectId = it.id else taskId = it.id
+                },
+                onSetDone = viewModel::setDone,
+                onTrash = viewModel::trash,
+                onRestore = viewModel::restore,
+                onReschedule = {},
+            ),
+            onOpenArea = {
+                searching = false
+                areaId = it.id
+            },
+            onDismiss = { searching = false },
         )
         return
     }
@@ -454,7 +535,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                     val project = projectId?.let { library.task(it) }
                     when {
                         project != null -> {
-                            add(R.string.new_todo_title to { adding = true })
+                            add(R.string.new_todo_title to { startAdding() })
                             if (library.canEditProject(project)) {
                                 add(R.string.new_heading_title to {
                                     naming = NameRequest(R.string.new_heading_title) { viewModel.addHeading(project.id, it) }
@@ -462,7 +543,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             }
                         }
                         areaId != null -> {
-                            add(R.string.new_todo_title to { adding = true })
+                            add(R.string.new_todo_title to { startAdding() })
                             add(R.string.new_project_title to { addingProject = true })
                         }
                         tab == ListTab.AREAS -> add(R.string.new_area_title to { naming = NameRequest(R.string.new_area_title) { viewModel.addArea(it) } })
@@ -472,13 +553,28 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                         }
                     }
                 }
+                // A tap creates the first choice (a to-do wherever one fits); a long press offers them all.
+                val addLabel = stringResource(choices.firstOrNull()?.first ?: R.string.add_to_inbox)
+                val moreLabel = stringResource(R.string.add_choices)
                 Box {
-                    FloatingActionButton(
-                        onClick = { if (choices.isEmpty()) adding = true else addMenu = true },
-                        containerColor = ListColors.checked,
+                    Surface(
+                        shape = FloatingActionButtonDefaults.shape,
+                        color = ListColors.checked,
                         contentColor = Color.White,
+                        shadowElevation = 6.dp,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .semantics {
+                                contentDescription = addLabel
+                                if (choices.size > 1) onLongClick(moreLabel) { addMenu = true; true }
+                            }
+                            .clip(FloatingActionButtonDefaults.shape)
+                            .combinedClickable(
+                                onClick = { choices.firstOrNull()?.second?.invoke() ?: startAdding() },
+                                onLongClick = { if (choices.size > 1) addMenu = true },
+                            ),
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.add_to_inbox))
+                        Box(contentAlignment = Alignment.Center) { Icon(Icons.Filled.Add, contentDescription = null) }
                     }
                     DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }) {
                         choices.forEach { (label, action) ->
@@ -537,6 +633,12 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             }
                         }
                     } else {
+                        IconButton(onClick = {
+                            query = ""
+                            searching = true
+                        }) {
+                            Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search))
+                        }
                         IconButton(onClick = { filtering = true }) {
                             Icon(
                                 Icons.AutoMirrored.Filled.List,
@@ -594,7 +696,13 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                         emptyText = stringResource(R.string.no_open_todos),
                         actions = rowActions,
                         onHeading = { heading ->
-                            naming = NameRequest(R.string.rename_heading, heading.title) { viewModel.renameHeading(heading.id, it) }
+                            // Deleting a heading moves it to the Trash with its to-dos, as its swipe does.
+                            val canDelete = library.task(heading.id)?.let(library::canTrash) == true
+                            naming = NameRequest(
+                                R.string.rename_heading,
+                                heading.title,
+                                onDelete = { viewModel.trash(heading.id) }.takeIf { canDelete },
+                            ) { viewModel.renameHeading(heading.id, it) }
                         },
                         // Dragging needs the whole list: off while a filter hides rows.
                         onDrop = { task: Task, section: Group, order: List<String> ->
@@ -635,7 +743,10 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                         onDrop = { task: Task, _: Group, order: List<String> -> viewModel.reorder(task.id, order, "area:${openArea.id}") }.takeIf { filter.isEmpty },
                     )
                 }
-                else -> {
+                else -> Column(Modifier.nestedScroll(pullToSearch {
+                    query = ""
+                    searching = true
+                })) {
                     PrimaryScrollableTabRow(selectedTabIndex = tab.ordinal, edgePadding = 8.dp) {
                         ListTab.entries.forEach { entry ->
                             Tab(
@@ -728,6 +839,106 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     }
 }
 
+/**
+ * Pulling a list down past its top, by about a row's height, opens the search, as in Things.
+ * A fling or a scroll back up starts the count again.
+ */
+@Composable
+private fun pullToSearch(onPull: () -> Unit): NestedScrollConnection {
+    val threshold = with(LocalDensity.current) { 96.dp.toPx() }
+    val pull by rememberUpdatedState(onPull)
+    return remember(threshold) {
+        object : NestedScrollConnection {
+            var pulled = 0f
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput && available.y > 0f) {
+                    pulled += available.y
+                    if (pulled > threshold) {
+                        pulled = Float.NEGATIVE_INFINITY
+                        pull()
+                    }
+                } else if (consumed.y != 0f || available.y < 0f) {
+                    pulled = 0f
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                pulled = 0f
+                return Velocity.Zero
+            }
+        }
+    }
+}
+
+/** Quick Find over to-dos, projects and areas; a result opens where it is. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchScreen(
+    library: ThingsLibrary,
+    query: String,
+    onQuery: (String) -> Unit,
+    actions: RowActions,
+    onOpenArea: (Area) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    BackHandler(onBack = onDismiss)
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    val result = remember(library, query) { library.search(query) }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back)) }
+                },
+                title = {
+                    TextField(
+                        value = query,
+                        onValueChange = onQuery,
+                        placeholder = { Text(stringResource(R.string.search_hint)) },
+                        singleLine = true,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                        ),
+                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                    )
+                },
+                actions = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { onQuery("") }) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.clear_search)) }
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        LazyColumn(Modifier.fillMaxSize().padding(padding).imePadding()) {
+            if (query.isNotBlank() && result.tasks.isEmpty() && result.areas.isEmpty()) {
+                item(key = "none") {
+                    Text(stringResource(R.string.search_none), Modifier.padding(20.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            items(result.areas, key = { "area-" + it.id }) { area ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onOpenArea(area) }.padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ListIcon(ListKind.AREA, size = 20.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(area.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            items(result.tasks, key = { it.id }) { task ->
+                if (task.type == TaskType.PROJECT) ProjectRow(library, task, actions.onOpen) else TaskRow(library, task, actions, showWhen = true)
+            }
+        }
+    }
+}
+
 private class RowActions(
     val onOpen: (Task) -> Unit,
     val onSetDone: (String, Boolean) -> Unit,
@@ -742,7 +953,30 @@ private class RowActions(
  */
 @Composable
 private fun MoveDialog(library: ThingsLibrary, item: Task, onPick: (PendingChange.Destination) -> Unit, onDismiss: () -> Unit) {
-    val isProject = item.type == TaskType.PROJECT
+    val current = when {
+        item.headingId != null -> PendingChange.Destination(headingId = item.headingId)
+        item.projectId != null -> PendingChange.Destination(projectId = item.projectId)
+        item.areaId != null -> PendingChange.Destination(areaId = item.areaId)
+        item.start == StartList.INBOX -> PendingChange.Destination(inbox = true)
+        else -> null
+    }
+    PlaceDialog(library, item.type == TaskType.PROJECT, current, R.string.move, onPick, onDismiss)
+}
+
+/**
+ * Inbox, projects with their headings, and areas with their projects, for a to-do; areas for a
+ * project ([isProject]). [current] is marked and cannot be picked.
+ */
+@Composable
+private fun PlaceDialog(
+    library: ThingsLibrary,
+    isProject: Boolean,
+    current: PendingChange.Destination?,
+    @StringRes title: Int,
+    onPick: (PendingChange.Destination) -> Unit,
+    onDismiss: () -> Unit,
+    headings: Boolean = true,
+) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     @Composable
     fun Choice(kind: ListKind?, label: String, indent: Int, current: Boolean, destination: PendingChange.Destination) {
@@ -758,32 +992,32 @@ private fun MoveDialog(library: ThingsLibrary, item: Task, onPick: (PendingChang
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(if (isProject) R.string.move_to_area else R.string.move)) },
+        title = { Text(stringResource(if (isProject) R.string.move_to_area else title)) },
         text = {
             LazyColumn(Modifier.heightIn(max = 420.dp)) {
                 if (isProject) {
-                    item { Choice(null, stringResource(R.string.no_area), 0, item.areaId == null, PendingChange.Destination()) }
+                    item { Choice(null, stringResource(R.string.no_area), 0, current?.areaId == null, PendingChange.Destination()) }
                     items(library.areas(), key = { it.id }) { area ->
-                        Choice(ListKind.AREA, area.title, 0, item.areaId == area.id, PendingChange.Destination(areaId = area.id))
+                        Choice(ListKind.AREA, area.title, 0, current?.areaId == area.id, PendingChange.Destination(areaId = area.id))
                     }
                 } else {
                     item {
-                        Choice(ListKind.INBOX, stringResource(R.string.list_inbox), 0, item.start == StartList.INBOX && item.projectId == null && item.areaId == null, PendingChange.Destination(inbox = true))
+                        Choice(ListKind.INBOX, stringResource(R.string.list_inbox), 0, current?.inbox == true, PendingChange.Destination(inbox = true))
                     }
                     fun LazyListScope.project(project: Task, indent: Int) {
                         item(key = project.id) {
-                            Choice(ListKind.PROJECT, project.title, indent, item.projectId == project.id && item.headingId == null, PendingChange.Destination(projectId = project.id))
+                            Choice(ListKind.PROJECT, project.title, indent, current?.projectId == project.id, PendingChange.Destination(projectId = project.id))
                         }
-                        library.projectSections(project.id).mapNotNull { it.heading }.forEach { heading ->
+                        if (headings) library.projectSections(project.id).mapNotNull { it.heading }.forEach { heading ->
                             item(key = heading.id) {
-                                Choice(null, heading.title, indent + 1, item.headingId == heading.id, PendingChange.Destination(headingId = heading.id))
+                                Choice(null, heading.title, indent + 1, current?.headingId == heading.id, PendingChange.Destination(headingId = heading.id))
                             }
                         }
                     }
                     library.projects().filter { it.areaId == null }.forEach { project(it, 0) }
                     library.areas().forEach { area ->
                         item(key = area.id) {
-                            Choice(ListKind.AREA, area.title, 0, item.projectId == null && item.areaId == area.id, PendingChange.Destination(areaId = area.id))
+                            Choice(ListKind.AREA, area.title, 0, current?.areaId == area.id, PendingChange.Destination(areaId = area.id))
                         }
                         library.areaProjects(area.id).forEach { project(it, 1) }
                     }
@@ -887,10 +1121,11 @@ private fun RepeatDialog(start: LocalDate, onPick: (RepeatRule) -> Unit, onDismi
 }
 
 /** A name to ask for: a new heading or area, or a new name for one. */
-private class NameRequest(@StringRes val title: Int, val initial: String = "", val onName: (String) -> Unit)
+/** A name to type; with [onDelete], the dialog also offers to delete what is named. */
+private class NameRequest(@StringRes val title: Int, val initial: String = "", val onDelete: (() -> Unit)? = null, val onName: (String) -> Unit)
 
 @Composable
-private fun NameDialog(title: String, initial: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+private fun NameDialog(title: String, initial: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit, onDelete: (() -> Unit)? = null) {
     var name by rememberSaveable { mutableStateOf(initial) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -908,7 +1143,14 @@ private fun NameDialog(title: String, initial: String, onConfirm: (String) -> Un
             )
         },
         confirmButton = { TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.save)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        dismissButton = {
+            Row {
+                if (onDelete != null) {
+                    TextButton(onClick = onDelete) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+                }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            }
+        },
     )
 }
 
@@ -1495,7 +1737,7 @@ private fun ProjectRow(library: ThingsLibrary, project: Task, onOpen: (Task) -> 
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { onOpen(project) }.padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ListIcon(ListKind.PROJECT, size = 20.dp)
+        ListIcon(ListKind.PROJECT, size = 20.dp, progress = library.projectProgress(project.id))
         Spacer(Modifier.width(12.dp))
         Text(project.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         val open = library.projectTasks(project.id).size
@@ -1542,7 +1784,7 @@ private fun TaskDetail(
                     size = 24.dp,
                 )
             } else {
-                ListIcon(ListKind.PROJECT, Modifier.padding(10.dp), size = 24.dp)
+                ListIcon(ListKind.PROJECT, Modifier.padding(10.dp), size = 24.dp, progress = library.projectProgress(task.id))
             }
             Text(
                 task.title,

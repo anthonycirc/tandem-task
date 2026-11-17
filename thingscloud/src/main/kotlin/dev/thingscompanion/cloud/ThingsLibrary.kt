@@ -64,6 +64,8 @@ data class Area(val id: String, val title: String, val index: Int, internal val 
 
 data class Tag(val id: String, val title: String, val index: Int = 0)
 
+data class SearchResult(val tasks: List<Task>, val areas: List<Area>)
+
 data class ChecklistItem(
     val id: String,
     val title: String,
@@ -96,6 +98,22 @@ class ThingsLibrary private constructor(
     fun checklistItem(id: String): ChecklistItem? = checklistItems[id]
 
     private val checklistItems by lazy { checklists.values.flatten().associateBy { it.id } }
+
+    /**
+     * Quick Find: to-dos and projects whose title or notes hold [query], and areas whose title
+     * does, ignoring case and accents. Open items first, projects before to-dos, then Things'
+     * order; completed and cancelled ones last. The Trash and repeating templates are left out.
+     */
+    fun search(query: String): SearchResult {
+        val needle = fold(query.trim())
+        if (needle.isEmpty()) return SearchResult(emptyList(), emptyList())
+        fun matches(text: String?) = text != null && needle in fold(text)
+        val found = tasks.values.filter {
+            it.type != TaskType.HEADING && !it.trashed && !it.inTrashedContainer && it.isCurrentEntity &&
+                !it.isRecurrenceTemplate && it.title.isNotBlank() && (matches(it.title) || matches(it.notes))
+        }.sortedWith(compareBy<Task>({ !it.isOpen }, { it.type != TaskType.PROJECT }).then(byIndex))
+        return SearchResult(found, areas().filter { matches(it.title) })
+    }
 
     /** Trashed to-dos, most recently changed first (Things' Trash). */
     fun trash(): List<Task> = tasks.values
@@ -245,6 +263,12 @@ class ThingsLibrary private constructor(
     fun projectTasks(projectId: String, closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) { it.isTodo && it.projectId == projectId }
         .sortedWith(byIndex)
 
+    /** The share of a project's to-dos done (completed or cancelled), 0 to 1, for its filling circle. */
+    fun projectProgress(projectId: String): Float {
+        val all = tasks.values.filter { it.isTodo && it.projectId == projectId && !it.trashed && it.isCurrentEntity && it.title.isNotBlank() }
+        return if (all.isEmpty()) 0f else all.count { !it.isOpen }.toFloat() / all.size
+    }
+
     /** An area's open projects, in Things' order. */
     fun areaProjects(areaId: String): List<Task> = projects().filter { it.areaId == areaId }
 
@@ -310,6 +334,11 @@ class ThingsLibrary private constructor(
         // Older areas and tags (Area2, Tag3) were replaced by Things' migration and are gone from its apps.
         private const val MIN_AREA_ENTITY_VERSION = 3
         private const val MIN_TAG_ENTITY_VERSION = 4
+
+        private val MARKS = Regex("\\p{M}+")
+
+        /** Lower case without accents, so "demenag" finds "Déménagement". */
+        private fun fold(text: String) = MARKS.replace(java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD), "").lowercase()
 
         private val tagOrder = compareBy<Tag>({ it.index }, { it.title.lowercase() }, { it.id })
 

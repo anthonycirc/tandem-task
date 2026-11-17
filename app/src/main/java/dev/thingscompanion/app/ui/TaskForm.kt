@@ -2,6 +2,20 @@ package dev.thingscompanion.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import dev.thingscompanion.cloud.TitleEmoji
+import androidx.compose.material3.AssistChip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -110,6 +124,8 @@ fun TaskFormScreen(
     allowDeadline: Boolean,
     onSubmit: (title: String, notes: String, schedule: Schedule, reminder: LocalTime?, checklist: List<ChecklistDraft>, deadline: LocalDate?) -> Unit,
     allowReminder: Boolean = true,
+    place: Pair<ListKind, String>? = null,
+    onPickPlace: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     val today = ThingsDay.today()
@@ -121,6 +137,7 @@ fun TaskFormScreen(
     }
 
     var title by rememberSaveable { mutableStateOf(initial.title) }
+    var pickingEmoji by remember { mutableStateOf(false) }
     var notes by rememberSaveable { mutableStateOf(initial.notes) }
     val checklist = rememberSaveable(saver = checklistSaver) { initial.checklist.toMutableStateList() }
     var whenChoice by rememberSaveable { mutableStateOf(WhenChoice.of(initial.schedule)) }
@@ -227,8 +244,24 @@ fun TaskFormScreen(
                 label = { Text(stringResource(R.string.title)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
+                trailingIcon = {
+                    IconButton(onClick = {
+                        hideKeyboard()
+                        pickingEmoji = true
+                    }) { Text(TitleEmoji.leading(title) ?: "☺", fontSize = 20.sp) }
+                },
                 modifier = Modifier.fillMaxWidth().focusRequester(titleFocus),
             )
+            if (pickingEmoji) {
+                EmojiDialog(
+                    current = TitleEmoji.leading(title),
+                    onPick = {
+                        pickingEmoji = false
+                        title = TitleEmoji.apply(title, it)
+                    },
+                    onDismiss = { pickingEmoji = false },
+                )
+            }
             OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },
@@ -274,6 +307,18 @@ fun TaskFormScreen(
                     Icon(Icons.Filled.Add, contentDescription = null)
                     Text(stringResource(R.string.add_checklist_item), Modifier.padding(start = 8.dp))
                 }
+            }
+
+            if (place != null && onPickPlace != null) {
+                Text(stringResource(R.string.place_label), style = MaterialTheme.typography.labelLarge)
+                AssistChip(
+                    onClick = {
+                        hideKeyboard()
+                        onPickPlace()
+                    },
+                    label = { Text(place.second, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    leadingIcon = { ListIcon(place.first, size = 16.dp) },
+                )
             }
 
             if (allowSchedule) {
@@ -404,5 +449,35 @@ private fun TimePickerDialog(initial: LocalTime, onPicked: (LocalTime) -> Unit, 
             TextButton(onClick = { onPicked(LocalTime.of(state.hour, state.minute)) }) { Text(stringResource(R.string.ok)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+/** A grid of emoji to lead the title with, and a choice to take it off. */
+@Composable
+private fun EmojiDialog(current: String?, onPick: (String?) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.emoji_title)) },
+        text = {
+            LazyVerticalGrid(columns = GridCells.Adaptive(48.dp), modifier = Modifier.heightIn(max = 360.dp)) {
+                items(TitleEmoji.CHOICES) { emoji ->
+                    Box(
+                        Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (emoji == current) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                            .clickable { onPick(emoji) },
+                        contentAlignment = Alignment.Center,
+                    ) { Text(emoji, fontSize = 24.sp) }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            Row {
+                if (current != null) TextButton(onClick = { onPick(null) }) { Text(stringResource(R.string.emoji_none)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            }
+        },
     )
 }
