@@ -36,4 +36,11 @@ class TitleEmojiTest {
         assertEquals("📞 → Next step", TitleEmoji.apply("→ Next step", "📞"))
         assertEquals("→ Next step", TitleEmoji.apply("→ Next step", null))
     }
+
+    @Test
+    fun `a flag, two regional indicators, is one emoji`() {
+        assertEquals("🇪🇸", TitleEmoji.leading("🇪🇸 Trip"))
+        assertEquals("📞 Trip", TitleEmoji.apply("🇪🇸 Trip", "📞"))
+        assertEquals("Trip", TitleEmoji.apply("🇪🇸 Trip", null))
+    }
 }
