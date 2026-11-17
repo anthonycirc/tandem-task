@@ -1,5 +1,6 @@
 package dev.thingscompanion.app.widget
 
+import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
@@ -42,7 +43,9 @@ import androidx.glance.text.FontWeight
 import androidx.glance.semantics.contentDescription
 import androidx.glance.semantics.semantics
 import androidx.glance.text.Text
+import androidx.glance.text.TextDecoration
 import androidx.glance.text.TextStyle
+import dev.thingscompanion.cloud.WidgetChecks
 import dev.thingscompanion.app.MainActivity
 import dev.thingscompanion.app.R
 import dev.thingscompanion.app.data.readWidgetSnapshot
@@ -60,15 +63,18 @@ class ListWidget : GlanceAppWidget() {
                 val prefs = currentState<Preferences>()
                 val version = prefs[SNAPSHOT_VERSION] ?: 0L
                 val snapshot = remember(version) { readWidgetSnapshot(context) }
+                val ticks = remember(version) { WidgetCheckStore.read(context) }
                 val listKey = prefs[LIST_KEY] ?: DEFAULT_LIST
                 val theme = prefs[THEME_KEY]?.let { runCatching { WidgetTheme.valueOf(it) }.getOrNull() } ?: WidgetTheme.SYSTEM
-                Content(context, snapshot, listKey, WidgetColors(theme, prefs[OPACITY_KEY] ?: DEFAULT_OPACITY))
+                val color = prefs[COLOR_KEY]?.let { runCatching { WidgetColor.valueOf(it) }.getOrNull() } ?: WidgetColor.DEFAULT
+                val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
+                Content(context, snapshot, ticks, listKey, appWidgetId, WidgetColors(theme, prefs[OPACITY_KEY] ?: DEFAULT_OPACITY, color))
             }
         }
     }
 
     @Composable
-    private fun Content(context: Context, snapshot: WidgetSnapshot?, listKey: String, colors: WidgetColors) {
+    private fun Content(context: Context, snapshot: WidgetSnapshot?, ticks: WidgetChecks, listKey: String, appWidgetId: Int, colors: WidgetColors) {
         Column(
             modifier = GlanceModifier
                 .fillMaxSize()
@@ -82,7 +88,15 @@ class ListWidget : GlanceAppWidget() {
                     style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = colors.text),
                     modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity(openApp(context))),
                 )
-                Spacer(GlanceModifier.width(8.dp))
+                // The list, theme and colour, changed from the widget itself.
+                Text(
+                    text = "⋯",
+                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colors.secondary),
+                    modifier = GlanceModifier
+                        .padding(horizontal = 8.dp)
+                        .semantics { contentDescription = context.getString(R.string.widget_settings) }
+                        .clickable(actionStartActivity(configure(context, appWidgetId))),
+                )
                 Text(
                     text = "+",
                     style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 22.sp, color = colors.accent),
@@ -94,22 +108,22 @@ class ListWidget : GlanceAppWidget() {
                 snapshot == null -> Message(context.getString(R.string.widget_open_app), colors)
                 items.isEmpty() -> Message(context.getString(R.string.nothing_here), colors)
                 else -> LazyColumn {
-                    items(items, itemId = { it.id.hashCode().toLong() }) { item -> TaskRow(context, item, colors) }
+                    items(items, itemId = { it.id.hashCode().toLong() }) { item -> TaskRow(context, item, ticks.isTicked(item.id), colors) }
                 }
             }
         }
     }
 
-    /** The circle checks the to-do (or opens it when the app cannot check it); the title opens it. */
+    /** The circle ticks the to-do (or opens it when the app cannot check it); the title opens it. */
     @Composable
-    private fun TaskRow(context: Context, item: WidgetSnapshot.Item, colors: WidgetColors) {
+    private fun TaskRow(context: Context, item: WidgetSnapshot.Item, ticked: Boolean, colors: WidgetColors) {
         val open = actionStartActivity(openApp(context, taskId = item.id))
         val check = if (item.canToggle) actionRunCallback<CheckTaskAction>(actionParametersOf(CheckTaskAction.TASK_ID to item.id)) else open
         val description = context.getString(R.string.widget_check, item.title)
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "○",
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.secondary),
+                text = if (ticked) "✓" else "○",
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = if (ticked) colors.accent else colors.secondary),
                 modifier = GlanceModifier
                     .padding(start = 2.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)
                     .semantics { contentDescription = description }
@@ -118,7 +132,11 @@ class ListWidget : GlanceAppWidget() {
             Text(
                 text = item.title,
                 maxLines = 2,
-                style = TextStyle(fontSize = 14.sp, color = colors.text),
+                style = TextStyle(
+                    fontSize = 14.sp,
+                    color = if (ticked) colors.secondary else colors.text,
+                    textDecoration = if (ticked) TextDecoration.LineThrough else null,
+                ),
                 modifier = GlanceModifier.defaultWeight().padding(vertical = 6.dp).clickable(open),
             )
         }
@@ -137,6 +155,7 @@ class ListWidget : GlanceAppWidget() {
         val LIST_KEY = stringPreferencesKey("list_key")
         val THEME_KEY = stringPreferencesKey("theme")
         val OPACITY_KEY = intPreferencesKey("opacity")
+        val COLOR_KEY = stringPreferencesKey("color")
         private val SNAPSHOT_VERSION = longPreferencesKey("snapshot_version")
         const val DEFAULT_LIST = "today"
         const val DEFAULT_OPACITY = 100
@@ -150,6 +169,14 @@ class ListWidget : GlanceAppWidget() {
                 taskId?.let { putExtra(MainActivity.EXTRA_TASK_ID, it) }
             }
 
+        private fun configure(context: Context, appWidgetId: Int): Intent =
+            Intent(context, WidgetConfigActivity::class.java).apply {
+                // Its own task (see the manifest): the app's open screens stay as they were.
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                action = "dev.thingscompanion.CONFIGURE:$appWidgetId"
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            }
+
         /** Redraws every placed widget from the latest snapshot. */
         suspend fun refreshAll(context: Context) {
             val version = System.nanoTime()
@@ -159,7 +186,7 @@ class ListWidget : GlanceAppWidget() {
             ListWidget().updateAll(context)
         }
 
-        data class Settings(val listKey: String, val theme: WidgetTheme, val opacity: Int)
+        data class Settings(val listKey: String, val theme: WidgetTheme, val opacity: Int, val color: WidgetColor = WidgetColor.DEFAULT)
 
         suspend fun settings(context: Context, appWidgetId: Int): Settings {
             val glanceId = GlanceAppWidgetManager(context).getGlanceIdBy(appWidgetId)
@@ -168,6 +195,7 @@ class ListWidget : GlanceAppWidget() {
                 listKey = prefs[LIST_KEY] ?: DEFAULT_LIST,
                 theme = prefs[THEME_KEY]?.let { runCatching { WidgetTheme.valueOf(it) }.getOrNull() } ?: WidgetTheme.SYSTEM,
                 opacity = prefs[OPACITY_KEY] ?: DEFAULT_OPACITY,
+                color = prefs[COLOR_KEY]?.let { runCatching { WidgetColor.valueOf(it) }.getOrNull() } ?: WidgetColor.DEFAULT,
             )
         }
 
@@ -177,6 +205,7 @@ class ListWidget : GlanceAppWidget() {
                 it[LIST_KEY] = settings.listKey
                 it[THEME_KEY] = settings.theme.name
                 it[OPACITY_KEY] = settings.opacity.coerceIn(0, 100)
+                it[COLOR_KEY] = settings.color.name
             }
             ListWidget().update(context, glanceId)
         }

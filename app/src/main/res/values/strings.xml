@@ -190,4 +190,21 @@
         <item quantity="other">Delete %1$d to-dos for good?</item>
     </plurals>
     <string name="now_repeats">Now repeats</string>
+    <string name="search">Search</string>
+    <string name="search_hint">Search to-dos, projects and areas</string>
+    <string name="clear_search">Clear search</string>
+    <string name="search_none">No results</string>
+    <string name="widget_color">Color</string>
+    <string name="widget_color_default">Default</string>
+    <string name="widget_color_blue">Blue</string>
+    <string name="widget_color_green">Green</string>
+    <string name="widget_color_purple">Purple</string>
+    <string name="widget_color_red">Red</string>
+    <string name="widget_color_orange">Orange</string>
+    <string name="widget_color_grey">Gray</string>
+    <string name="place_label">Project or area</string>
+    <string name="add_choices">More to add</string>
+    <string name="delete">Delete</string>
+    <string name="emoji_title">Emoji</string>
+    <string name="emoji_none">No emoji</string>
 </resources>

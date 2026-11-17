@@ -30,7 +30,9 @@
 
         <activity
             android:name=".widget.WidgetConfigActivity"
-            android:exported="true">
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity="dev.thingscompanion.app.widgetconfig">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
             </intent-filter>

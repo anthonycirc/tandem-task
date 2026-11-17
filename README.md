@@ -15,16 +15,17 @@ Things has no Android app. Tandem Task brings your lists, notes and reminders to
 ## Features
 
 - **Your lists**: Today (with This Evening), Inbox, Upcoming (grouped by day), Anytime, Someday, Projects (grouped by area), Areas and Trash, with notes, checklists, tags, deadlines and repeat rules. Projects show their to-dos under their headings.
+- **Search**: pull a list down, or tap the magnifier, to find to-dos, projects and areas by title or notes.
 - **Works offline, never waits**: every change shows at once. Changes are kept on the phone and sent in the background a few seconds after your last tap, or later when the network comes back.
 - **Swipe actions**: swipe a to-do left to reschedule (Today, This Evening, Tomorrow, a date, Anytime, Someday), swipe right to move it to the Trash, with Undo. Projects, headings and areas are deleted the same way.
 - **Drag to reorder**: long-press a to-do, a heading or a project and drag it, also into This Evening, under another heading or into another area.
-- **Add and edit to-dos**: title, notes, checklist items, when, reminder and deadline, and move them to the Inbox, a project, a heading or an area. Make a dated to-do repeat every N days, weeks, months or years, on a fixed schedule (weekly on chosen days; monthly or yearly on its day, its weekday's rank or the last day) or after completion, and check such to-dos off the way Things does it, so the next one comes on the right day; other repeats stay protected the way Things expects.
-- **Projects and areas**: create projects (with when and deadline), headings and areas; rename, complete, cancel, reopen, move and delete them. Completing a project completes its open to-dos, as in Things.
+- **Add and edit to-dos**: title (with an emoji in front if you like), notes, checklist items, when, reminder and deadline, the project or area right when you add it, and move them to the Inbox, a project, a heading or an area. Make a dated to-do repeat every N days, weeks, months or years, on a fixed schedule (weekly on chosen days; monthly or yearly on its day, its weekday's rank or the last day) or after completion, and check such to-dos off the way Things does it, so the next one comes on the right day; other repeats stay protected the way Things expects.
+- **Projects and areas**: each project's circle fills as its to-dos get done. Tap **+** to add a to-do, or long-press it for a heading. Create projects (with when and deadline), headings and areas; rename, complete, cancel, reopen, move and delete them. Completing a project completes its open to-dos, as in Things.
 - **Markdown in notes**: bold, italic, strikethrough, code, headings, lists and links, styled while you read and while you type.
 - **Checklists**: check items from the to-do, add, rename or delete them.
 - **Trash**: move to-dos to the Trash, restore them, or delete them for good (one at a time or Empty Trash), after a confirmation.
 - **Reminders on Android**: reminders set on any device ring on your phone as notifications, on time.
-- **Home-screen widget**: any list or project. Tap a circle to check a to-do off, or **+** to add one. Light, dark or system theme, adjustable background opacity.
+- **Home-screen widget**: any list or project. Tap a circle to check a to-do off (it stays ticked for 3 seconds, so a second tap takes a mistake back), or **+** to add one. The ⋯ button changes the list, the theme (light, dark or system), the background color and its opacity.
 - **Filters**: by tag, project or area, and date. Show or hide to-dos completed today.
 - **Background sync** every 30 minutes and when you come back to the app, so the widget stays current.
 - A design in the spirit of Things. Light, dark or system theme. English and French.

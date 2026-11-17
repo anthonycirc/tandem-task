@@ -83,6 +83,8 @@ sealed interface PendingChange {
             val schedule = schedule.toSchedule()
             val heading = headingId?.let { library.task(it) ?: throw NoSuchElementException("The heading no longer exists.") }
             val project = (projectId ?: heading?.projectId)?.let { library.task(it) ?: throw NoSuchElementException("The project no longer exists.") }
+            // Filing in an area Things no longer has made Things 3 for Mac crash on sync (2026-11-17).
+            areaId?.let { library.area(it) ?: throw NoSuchElementException("The area no longer exists.") }
             val index = when {
                 project != null -> library.nextIndexInProject(project.id)
                 areaId != null -> library.nextIndexInArea(areaId)

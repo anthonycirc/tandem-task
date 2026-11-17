@@ -10,6 +10,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -52,7 +55,7 @@ import kotlinx.coroutines.launch
 /** Picks a widget's list, theme and background opacity, when it is placed or reconfigured. */
 class WidgetConfigActivity : ComponentActivity() {
 
-    @OptIn(ExperimentalMaterial3Api::class)
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val appWidgetId = intent?.extras?.getInt(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
@@ -75,6 +78,7 @@ class WidgetConfigActivity : ComponentActivity() {
                     var listKey by rememberSaveable { mutableStateOf(current.listKey) }
                     var theme by rememberSaveable { mutableStateOf(current.theme) }
                     var opacity by rememberSaveable { mutableIntStateOf(current.opacity) }
+                    var color by rememberSaveable { mutableStateOf(current.color) }
 
                     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.widget_settings)) }) }) { padding ->
                         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -89,6 +93,19 @@ class WidgetConfigActivity : ComponentActivity() {
                                         )
                                     }
                                 }
+                                Text(stringResource(R.string.widget_color), style = MaterialTheme.typography.labelLarge)
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    WidgetColor.entries.forEach { option ->
+                                        FilterChip(
+                                            selected = color == option,
+                                            onClick = { color = option },
+                                            label = { Text(stringResource(option.label)) },
+                                            leadingIcon = option.background?.let { swatch ->
+                                                { Box(Modifier.size(14.dp).clip(RoundedCornerShape(7.dp)).background(swatch)) }
+                                            },
+                                        )
+                                    }
+                                }
                                 Text(stringResource(R.string.widget_opacity, opacity), style = MaterialTheme.typography.labelLarge)
                                 Slider(
                                     value = opacity.toFloat(),
@@ -96,7 +113,7 @@ class WidgetConfigActivity : ComponentActivity() {
                                     valueRange = 0f..100f,
                                     steps = 9,
                                 )
-                                Preview(theme, opacity)
+                                Preview(theme, opacity, color)
                                 Text(stringResource(R.string.widget_pick_list), style = MaterialTheme.typography.labelLarge)
                             }
                             LazyColumn(Modifier.weight(1f)) {
@@ -110,7 +127,7 @@ class WidgetConfigActivity : ComponentActivity() {
                                 }
                             }
                             Button(
-                                onClick = { save(appWidgetId, ListWidget.Companion.Settings(listKey, theme, opacity)) },
+                                onClick = { save(appWidgetId, ListWidget.Companion.Settings(listKey, theme, opacity, color)) },
                                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                             ) { Text(stringResource(R.string.save)) }
                         }
@@ -122,7 +139,7 @@ class WidgetConfigActivity : ComponentActivity() {
 
     /** A strip showing the chosen background over a checkerboard-like backdrop, so the opacity is visible. */
     @androidx.compose.runtime.Composable
-    private fun Preview(theme: WidgetTheme, opacity: Int) {
+    private fun Preview(theme: WidgetTheme, opacity: Int, color: WidgetColor) {
         val dark = when (theme) {
             WidgetTheme.SYSTEM -> isSystemInDarkTheme()
             WidgetTheme.LIGHT -> false
@@ -135,13 +152,13 @@ class WidgetConfigActivity : ComponentActivity() {
         ) {
             Box(
                 Modifier.fillMaxSize()
-                    .background((if (dark) Color(0xFF1F2024) else Color.White).copy(alpha = alpha))
+                    .background((color.background ?: if (dark) Color(0xFF1F2024) else Color.White).copy(alpha = alpha))
                     .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 Text(
                     stringResource(R.string.list_today),
-                    color = if (dark) Color(0xFFE6E1E5) else Color(0xFF1C1B1F),
+                    color = if (color.background != null) Color.White else if (dark) Color(0xFFE6E1E5) else Color(0xFF1C1B1F),
                     style = MaterialTheme.typography.titleMedium,
                 )
             }

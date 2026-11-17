@@ -192,4 +192,21 @@
         <item quantity="other">Supprimer définitivement %1$d tâches ?</item>
     </plurals>
     <string name="now_repeats">Répétition activée</string>
+    <string name="search">Rechercher</string>
+    <string name="search_hint">Rechercher des to-dos, projets et zones</string>
+    <string name="clear_search">Effacer la recherche</string>
+    <string name="search_none">Aucun résultat</string>
+    <string name="widget_color">Couleur</string>
+    <string name="widget_color_default">Par défaut</string>
+    <string name="widget_color_blue">Bleu</string>
+    <string name="widget_color_green">Vert</string>
+    <string name="widget_color_purple">Violet</string>
+    <string name="widget_color_red">Rouge</string>
+    <string name="widget_color_orange">Orange</string>
+    <string name="widget_color_grey">Gris</string>
+    <string name="place_label">Projet ou zone</string>
+    <string name="add_choices">Autres ajouts</string>
+    <string name="delete">Supprimer</string>
+    <string name="emoji_title">Emoji</string>
+    <string name="emoji_none">Sans emoji</string>
 </resources>

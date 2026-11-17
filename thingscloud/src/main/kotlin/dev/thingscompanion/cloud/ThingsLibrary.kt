@@ -62,7 +62,9 @@ data class ProjectSection(val heading: Task?, val tasks: List<Task>)
 
 data class Area(val id: String, val title: String, val index: Int, internal val entity: String? = "Area3")
 
-data class Tag(val id: String, val title: String)
+data class Tag(val id: String, val title: String, val index: Int = 0)
+
+data class SearchResult(val tasks: List<Task>, val areas: List<Area>)
 
 data class ChecklistItem(
     val id: String,
@@ -77,7 +79,7 @@ data class ChecklistItem(
 class ThingsLibrary private constructor(
     private val tasks: Map<String, Task>,
     private val areas: Map<String, Area>,
-    private val tags: Map<String, String>,
+    private val tags: Map<String, Tag>,
     private val checklists: Map<String, List<ChecklistItem>>,
 ) {
     fun task(id: String): Task? = tasks[id]
@@ -86,15 +88,32 @@ class ThingsLibrary private constructor(
 
     fun areas(): List<Area> = areas.values.sortedWith(compareBy<Area>({ it.index }, { it.id }))
 
-    fun tagTitles(task: Task): List<String> = task.tagIds.mapNotNull { tags[it] }
+    /** In Things' own tag order, as the Things apps show them. */
+    fun tagTitles(task: Task): List<String> = task.tagIds.mapNotNull { tags[it] }.sortedWith(tagOrder).map { it.title }
 
-    fun tags(): List<Tag> = tags.map { (id, title) -> Tag(id, title) }.sortedBy { it.title.lowercase() }
+    fun tags(): List<Tag> = tags.values.sortedWith(tagOrder)
 
     fun checklist(taskId: String): List<ChecklistItem> = checklists[taskId].orEmpty()
 
     fun checklistItem(id: String): ChecklistItem? = checklistItems[id]
 
     private val checklistItems by lazy { checklists.values.flatten().associateBy { it.id } }
+
+    /**
+     * Quick Find: to-dos and projects whose title or notes hold [query], and areas whose title
+     * does, ignoring case and accents. Open items first, projects before to-dos, then Things'
+     * order; completed and cancelled ones last. The Trash and repeating templates are left out.
+     */
+    fun search(query: String): SearchResult {
+        val needle = fold(query.trim())
+        if (needle.isEmpty()) return SearchResult(emptyList(), emptyList())
+        fun matches(text: String?) = text != null && needle in fold(text)
+        val found = tasks.values.filter {
+            it.type != TaskType.HEADING && !it.trashed && !it.inTrashedContainer && it.isCurrentEntity &&
+                !it.isRecurrenceTemplate && it.title.isNotBlank() && (matches(it.title) || matches(it.notes))
+        }.sortedWith(compareBy<Task>({ !it.isOpen }, { it.type != TaskType.PROJECT }).then(byIndex))
+        return SearchResult(found, areas().filter { matches(it.title) })
+    }
 
     /** Trashed to-dos, most recently changed first (Things' Trash). */
     fun trash(): List<Task> = tasks.values
@@ -244,6 +263,14 @@ class ThingsLibrary private constructor(
     fun projectTasks(projectId: String, closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) { it.isTodo && it.projectId == projectId }
         .sortedWith(byIndex)
 
+    /** The share of a project's to-dos done (completed or cancelled), 0 to 1, for its filling circle; repeating templates are not to-dos. */
+    fun projectProgress(projectId: String): Float {
+        val all = tasks.values.filter {
+            it.isTodo && it.projectId == projectId && !it.trashed && it.isCurrentEntity && !it.isRecurrenceTemplate && it.title.isNotBlank()
+        }
+        return if (all.isEmpty()) 0f else all.count { !it.isOpen }.toFloat() / all.size
+    }
+
     /** An area's open projects, in Things' order. */
     fun areaProjects(areaId: String): List<Task> = projects().filter { it.areaId == areaId }
 
@@ -306,6 +333,20 @@ class ThingsLibrary private constructor(
     companion object {
         private const val MIN_TASK_ENTITY_VERSION = 6
 
+        // Older areas and tags (Area2, Tag3) were replaced by Things' migration and are gone from its apps.
+        private const val MIN_AREA_ENTITY_VERSION = 3
+        private const val MIN_TAG_ENTITY_VERSION = 4
+
+        private val MARKS = Regex("\\p{M}+")
+
+        /** Lower case without accents, so "demenag" finds "Déménagement". */
+        private fun fold(text: String) = MARKS.replace(java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD), "").lowercase()
+
+        private val tagOrder = compareBy<Tag>({ it.index }, { it.title.lowercase() }, { it.id })
+
+        private fun StoredObject.isCurrent(kind: String, min: Int) =
+            entity?.takeIf { it.startsWith(kind) }?.removePrefix(kind)?.toIntOrNull()?.let { it >= min } ?: false
+
         fun from(state: HistoryState): ThingsLibrary {
             val raw = state.objects
             val rawTasks = raw.filterValues { it.entity?.startsWith("Task") == true }
@@ -317,7 +358,7 @@ class ThingsLibrary private constructor(
             fun directArea(id: String?) = id?.let { rawTasks[it]?.props }?.let { firstId(it, "ar") }
 
             // A project or to-do may still name an area deleted since: it then has none.
-            val areaIds = raw.filterValues { it.entity?.startsWith("Area") == true }.keys
+            val areaIds = raw.filterValues { it.isCurrent("Area", MIN_AREA_ENTITY_VERSION) }.keys
             val tasks = rawTasks.mapValues { (id, obj) ->
                 val p = obj.props
                 val heading = firstId(p, "agr")
@@ -353,11 +394,11 @@ class ThingsLibrary private constructor(
                 )
             }
 
-            val areas = raw.filterValues { it.entity?.startsWith("Area") == true }.mapValues { (id, obj) ->
+            val areas = raw.filterValues { it.isCurrent("Area", MIN_AREA_ENTITY_VERSION) }.mapValues { (id, obj) ->
                 Area(id, obj.props["tt"].stringOrNull().orEmpty(), obj.props.int("ix") ?: 0, obj.entity)
             }
-            val tags = raw.filterValues { it.entity?.startsWith("Tag") == true }
-                .mapValues { (_, obj) -> obj.props["tt"].stringOrNull().orEmpty() }
+            val tags = raw.filterValues { it.isCurrent("Tag", MIN_TAG_ENTITY_VERSION) }
+                .mapValues { (id, obj) -> Tag(id, obj.props["tt"].stringOrNull().orEmpty(), obj.props.int("ix") ?: 0) }
             val checklists = raw.filterValues { it.entity?.startsWith("ChecklistItem") == true }
                 .mapNotNull { (id, obj) ->
                     val owner = firstId(obj.props, "ts") ?: obj.props["ts"].stringOrNull() ?: return@mapNotNull null
