@@ -207,4 +207,6 @@
     <string name="delete">Delete</string>
     <string name="emoji_title">Emoji</string>
     <string name="emoji_none">No emoji</string>
+    <string name="tags_edit">Tags</string>
+    <string name="tags_none">No tags in Things yet. Create them in Things.</string>
 </resources>

@@ -139,6 +139,10 @@ class ThingsLibrary private constructor(
     fun canRestore(task: Task): Boolean = task.trashed && task.isCurrentEntity
 
     /** Trashed to-dos (repeating templates included) the app may delete for good; projects and headings stay for Things. */
+    /** A to-do or project in the lists (not a heading, not in the Trash, not a repeating template) takes tags. */
+    fun canTag(task: Task): Boolean =
+        (task.type == TaskType.TODO || task.type == TaskType.PROJECT) && !task.trashed && task.isCurrentEntity && !task.isRecurrenceTemplate
+
     fun canDeleteForever(task: Task): Boolean = task.trashed && task.isCurrentEntity && task.type == TaskType.TODO
 
     /** The to-dos generated from a repeating template. */

@@ -385,6 +385,22 @@ sealed interface PendingChange {
         }
     }
 
+    /** Sets a to-do's or project's tags; unknown tags are left out, the rest in Things' tag order. */
+    @Serializable
+    @SerialName("set_tags")
+    data class SetTags(override val opId: String, val taskId: String, val tagIds: List<String>) : PendingChange {
+        override val replaces get() = "tags:$taskId"
+
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            val task = library.task(taskId) ?: throw NoSuchElementException("The to-do no longer exists.")
+            require(library.canTag(task)) { "This item can't be tagged from the app." }
+            val wanted = tagIds.toSet()
+            val tags = library.tags().filter { it.id in wanted }.map { it.id }
+            if (tags == library.tags().filter { it.id in task.tagIds }.map { it.id }) return null
+            return mapOf(taskId to TaskEdits.setTags(task, tags, now))
+        }
+    }
+
     @Serializable
     @SerialName("checklist_add")
     data class AddChecklistItem(

@@ -236,6 +236,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     var repeatingId by rememberSaveable { mutableStateOf<String?>(null) }
     var deletingAreaId by rememberSaveable { mutableStateOf<String?>(null) }
     var searching by rememberSaveable { mutableStateOf(false) }
+    var taggingId by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     // To-dos to delete for good, frozen when asked: the confirmation sends exactly these.
     var deletingForever by rememberSaveable { mutableStateOf<List<String>?>(null) }
@@ -351,6 +352,18 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 if (moving.type == TaskType.PROJECT) viewModel.moveProject(moving.id, destination.areaId) else viewModel.moveTask(moving.id, destination)
             },
             onDismiss = { movingId = null },
+        )
+    }
+    val tagging = taggingId?.let { library?.task(it) }
+    if (tagging != null && library != null) {
+        TagsDialog(
+            library = library,
+            selected = tagging.tagIds.toSet(),
+            onSave = { ids ->
+                taggingId = null
+                viewModel.setTags(tagging.id, ids)
+            },
+            onDismiss = { taggingId = null },
         )
     }
     val deletingArea = deletingAreaId?.let { library?.area(it) }
@@ -683,6 +696,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                     onDeleteChecklistItem = viewModel::deleteChecklistItem,
                     onRestore = viewModel::restore,
                     onDeleteForever = { deletingForever = listOf(it) },
+                    onTags = { taggingId = it },
                 )
                 openProject != null -> {
                     if (!filter.isEmpty) ActiveFilters(library, filter, viewModel::setFilter)
@@ -699,6 +713,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                                     viewModel.trash(openProject.id)
                                 },
                                 onStatus = { viewModel.setProjectStatus(openProject.id, it) },
+                                onTags = { taggingId = openProject.id },
                             )
                         },
                         // Things' headings; with a filter on, headings left empty are hidden.
@@ -1640,6 +1655,7 @@ private fun ProjectHeader(
     onMove: () -> Unit,
     onTrash: () -> Unit,
     onStatus: (TaskStatus) -> Unit,
+    onTags: () -> Unit = {},
 ) {
     val editable = library.canEditProject(project)
     var confirming by remember { mutableStateOf<TaskStatus?>(null) }
@@ -1691,6 +1707,12 @@ private fun ProjectHeader(
                             menu = false
                             onMove()
                         })
+                        if (library.canTag(project)) {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.tags_edit)) }, onClick = {
+                                menu = false
+                                onTags()
+                            })
+                        }
                         DropdownMenuItem(text = { Text(stringResource(R.string.delete_project)) }, onClick = {
                             menu = false
                             onTrash()
@@ -1717,6 +1739,13 @@ private fun ProjectHeader(
         )
         if (facts.isNotEmpty()) {
             Text(facts.joinToString("  ·  "), Modifier.padding(start = 44.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        val tags = library.tagTitles(project)
+        if (tags.isNotEmpty()) {
+            FlowRow(
+                Modifier.padding(start = 44.dp, top = 4.dp).clickable(enabled = library.canTag(project), onClickLabel = stringResource(R.string.tags_edit)) { onTags() },
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) { tags.forEach { TagPill(it) } }
         }
     }
 }
@@ -1778,6 +1807,7 @@ private fun TaskDetail(
     onDeleteChecklistItem: (String) -> Unit,
     onRestore: (String) -> Unit,
     onDeleteForever: (String) -> Unit,
+    onTags: (String) -> Unit = {},
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val focusManager = LocalFocusManager.current
@@ -1887,14 +1917,14 @@ private fun TaskDetail(
         }
 
         HorizontalDivider(Modifier.padding(horizontal = 12.dp))
-        DetailFacts(library, task)
+        DetailFacts(library, task, onTags = { onTags(task.id) }.takeIf { library.canTag(task) })
     }
 }
 
 /** When, reminder, deadline, project and tags, each with its icon. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DetailFacts(library: ThingsLibrary, task: Task) {
+private fun DetailFacts(library: ThingsLibrary, task: Task, onTags: (() -> Unit)? = null) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val today = ThingsDay.today()
     Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1917,9 +1947,17 @@ private fun DetailFacts(library: ThingsLibrary, task: Task) {
             Fact({ ListIcon(ListKind.PROJECT, size = 18.dp) }, it)
         }
         val tags = library.tagTitles(task)
-        if (tags.isNotEmpty()) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (tags.isNotEmpty() || onTags != null) {
+            // Tapping the tags (or "Tags" when there are none) picks them.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = if (onTags != null) Modifier.clickable(onClickLabel = stringResource(R.string.tags_edit)) { onTags() } else Modifier,
+            ) {
                 tags.forEach { TagPill(it) }
+                if (onTags != null && tags.isEmpty()) {
+                    Text("# " + stringResource(R.string.tags_edit), style = MaterialTheme.typography.labelLarge, color = muted)
+                }
             }
         }
     }
@@ -2150,5 +2188,37 @@ private fun SettingsDialog(
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } },
+    )
+}
+
+/** Picks a to-do's or project's tags among Things' tags, in Things' order. */
+@Composable
+private fun TagsDialog(library: ThingsLibrary, selected: Set<String>, onSave: (List<String>) -> Unit, onDismiss: () -> Unit) {
+    val tags = remember(library) { library.tags() }
+    var picked by rememberSaveable { mutableStateOf(selected.filter { id -> tags.any { it.id == id } }) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.tags_edit)) },
+        text = {
+            if (tags.isEmpty()) {
+                Text(stringResource(R.string.tags_none), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                    items(tags, key = { it.id }) { tag ->
+                        val on = tag.id in picked
+                        Row(
+                            Modifier.fillMaxWidth().clickable { picked = if (on) picked - tag.id else picked + tag.id }.padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(checked = on, onCheckedChange = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(tag.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(picked) }, enabled = tags.isNotEmpty()) { Text(stringResource(R.string.save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }

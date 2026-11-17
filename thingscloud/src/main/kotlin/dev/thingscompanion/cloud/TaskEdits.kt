@@ -243,6 +243,10 @@ object TaskEdits {
     fun setTrashed(task: Task, trashed: Boolean, now: Double): JsonObject =
         update(task.entity, mapOf("tr" to JsonPrimitive(trashed)), now)
 
+    /** A to-do's or project's tags, as Things writes a tag change: {tg, md}. */
+    fun setTags(task: Task, tagIds: List<String>, now: Double): JsonObject =
+        update(task, mapOf("tg" to JsonArray(tagIds.map(::JsonPrimitive))), now)
+
     /** A new checklist item, shaped like the ones the Things app writes. */
     fun newChecklistItem(taskId: String, title: String, index: Int, now: Double): JsonObject {
         val trimmed = title.trim()

@@ -209,4 +209,6 @@
     <string name="delete">Supprimer</string>
     <string name="emoji_title">Emoji</string>
     <string name="emoji_none">Sans emoji</string>
+    <string name="tags_edit">Tags</string>
+    <string name="tags_none">Aucun tag dans Things pour l’instant. Crée-les dans Things.</string>
 </resources>

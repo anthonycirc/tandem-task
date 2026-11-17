@@ -2,6 +2,12 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.9] - 2026-11-17
+
+### Added
+
+- **Tags.** Tap a to-do's tags (or "Tags" when it has none), or use a project's menu, to pick its tags, written as Things 3 writes a tag change.
+
 ## [0.3.8] - 2026-11-17
 
 ### Added

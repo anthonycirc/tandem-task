@@ -272,6 +272,10 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
     fun renameArea(id: String, title: String) = change(PendingChange.RenameArea(newId(), id, title))
 
     /** A heading keeps its place and status; only its title changes. */
+    fun setTags(id: String, tagIds: List<String>) {
+        change(PendingChange.SetTags(newId(), id, tagIds))
+    }
+
     fun renameHeading(id: String, title: String) {
         val heading = _state.value.library?.task(id) ?: return
         change(PendingChange.EditTask(newId(), id, title, heading.notes.orEmpty(), PendingChange.When.of(Schedule.of(heading, ThingsDay.today()))))
