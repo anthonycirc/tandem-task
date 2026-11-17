@@ -75,14 +75,14 @@ class DeleteForeverTest {
     }
 
     @Test
-    fun `only trashed to-dos are deleted, projects, headings and open to-dos are skipped`() {
-        val payload = delete("old", "open", "proj", "head", "missing")!!
-        assertFalse("open" in payload || "proj" in payload || "head" in payload)
-        assertNull(delete("open", "proj", "head", "missing"))
+    fun `only trashed items are deleted, open ones are skipped`() {
+        // Trashed projects and headings are deleted too since 2026-11-17 (DeleteProjectsTest).
+        val payload = delete("old", "open", "missing")!!
+        assertFalse("open" in payload)
+        assertNull(delete("open", "missing"))
         val lib = library()
-        assertTrue(lib.canDeleteForever(lib.task("old")!!))
-        assertTrue(lib.canDeleteForever(lib.task("tmpl")!!))
-        listOf("open", "proj", "head", "live").forEach { assertFalse(lib.canDeleteForever(lib.task(it)!!), it) }
+        listOf("old", "tmpl", "proj", "head").forEach { assertTrue(lib.canDeleteForever(lib.task(it)!!), it) }
+        listOf("open", "live").forEach { assertFalse(lib.canDeleteForever(lib.task(it)!!), it) }
     }
 
     @Test
@@ -102,8 +102,8 @@ class DeleteForeverTest {
     }
 
     @Test
-    fun `the Trash's deletable to-dos are the trashed to-dos and templates`() {
+    fun `everything in the Trash can be deleted for good`() {
         val lib = library()
-        assertEquals(setOf("old", "tmpl", "gone"), lib.trash().filter(lib::canDeleteForever).map { it.id }.toSet())
+        assertEquals(setOf("old", "tmpl", "gone", "proj", "head"), lib.trash().filter(lib::canDeleteForever).map { it.id }.toSet())
     }
 }

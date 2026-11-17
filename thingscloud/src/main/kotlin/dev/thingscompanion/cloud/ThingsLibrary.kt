@@ -138,12 +138,17 @@ class ThingsLibrary private constructor(
 
     fun canRestore(task: Task): Boolean = task.trashed && task.isCurrentEntity
 
-    /** Trashed to-dos (repeating templates included) the app may delete for good; projects and headings stay for Things. */
+    /** Trashed to-dos (repeating templates included), projects and headings the app may delete for good. */
     /** A to-do or project in the lists (not a heading, not in the Trash, not a repeating template) takes tags. */
     fun canTag(task: Task): Boolean =
         (task.type == TaskType.TODO || task.type == TaskType.PROJECT) && !task.trashed && task.isCurrentEntity && !task.isRecurrenceTemplate
 
-    fun canDeleteForever(task: Task): Boolean = task.trashed && task.isCurrentEntity && task.type == TaskType.TODO
+    fun canDeleteForever(task: Task): Boolean = task.trashed && task.isCurrentEntity
+
+    /** Everything filed in a project (headings, and to-dos under it or its headings) or under a heading. */
+    fun containedTasks(containerId: String): List<Task> = tasks.values.filter {
+        it.isCurrentEntity && it.id != containerId && (it.projectId == containerId || it.headingId == containerId)
+    }
 
     /** The to-dos generated from a repeating template. */
     fun instancesOf(templateId: String): List<Task> = tasks.values.filter { templateId in it.recurrenceTemplateIds }

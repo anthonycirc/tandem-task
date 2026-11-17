@@ -32,6 +32,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -103,6 +106,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.Surface
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.foundation.combinedClickable
@@ -161,12 +167,27 @@ fun ThingsApp(viewModel: ThingsViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
+    // Clearing the message restarts this effect: the snackbar runs in its own scope so that restart
+    // does not cancel it (it used to vanish at once, Undo with it).
+    // A newer message replaces the one showing, so an older Undo never comes back after it.
+    val snackbarScope = rememberCoroutineScope()
+    var showing by remember { mutableStateOf<Job?>(null) }
     LaunchedEffect(state.message) {
-        state.message?.let {
-            viewModel.dismissMessage()
-            val text = if (it.arg != null) context.getString(it.res, it.arg) else context.getString(it.res)
-            val result = snackbar.showSnackbar(text, actionLabel = it.undo?.let { context.getString(R.string.undo) }, withDismissAction = false)
-            if (result == SnackbarResult.ActionPerformed) it.undo?.let(viewModel::undo)
+        val message = state.message ?: return@LaunchedEffect
+        viewModel.dismissMessage()
+        showing?.cancel()
+        snackbar.currentSnackbarData?.dismiss()
+        showing = snackbarScope.launch {
+            val text = when {
+                message.extra != null -> context.resources.getQuantityString(message.extra.first, message.extra.second, message.extra.second) +
+                    " · " + context.resources.getQuantityString(message.res, message.arg as Int, message.arg)
+                message.plural -> context.resources.getQuantityString(message.res, message.arg as Int, message.arg)
+                message.arg != null -> context.getString(message.res, message.arg)
+                else -> context.getString(message.res)
+            }
+            val undoLabel = context.getString(R.string.undo).takeIf { message.undo.isNotEmpty() }
+            val result = snackbar.showSnackbar(text, actionLabel = undoLabel, withDismissAction = false)
+            if (result == SnackbarResult.ActionPerformed) viewModel.undo(message.undo)
         }
     }
 
@@ -237,6 +258,13 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     var deletingAreaId by rememberSaveable { mutableStateOf<String?>(null) }
     var searching by rememberSaveable { mutableStateOf(false) }
     var taggingId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Selecting several to-dos or projects: null when not selecting.
+    var selection by rememberSaveable { mutableStateOf<List<String>?>(null) }
+    var selectionWhen by remember { mutableStateOf(false) }
+    var selectionMove by remember { mutableStateOf(false) }
+    fun toggleSelected(id: String) {
+        selection = selection?.let { if (id in it) it - id else it + id }
+    }
     var query by rememberSaveable { mutableStateOf("") }
     // To-dos to delete for good, frozen when asked: the confirmation sends exactly these.
     var deletingForever by rememberSaveable { mutableStateOf<List<String>?>(null) }
@@ -527,13 +555,25 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
         }
     }
     BackHandler(enabled = taskId != null || projectId != null || areaId != null) { back() }
+    // Back, or going to another list, ends a selection.
+    BackHandler(enabled = selection != null) { selection = null }
+    // Only a real change of place: rotating the screen keeps the selection.
+    var selectionPlace by rememberSaveable { mutableStateOf("$tab|$projectId|$areaId") }
+    LaunchedEffect(tab, projectId, areaId) {
+        val place = "$tab|$projectId|$areaId"
+        if (place != selectionPlace) {
+            selectionPlace = place
+            selection = null
+        }
+    }
 
     val today = ThingsDay.today()
     val openTask = taskId?.let { library?.task(it) }
     val openProject = projectId?.let { library?.task(it) }
     val openArea = areaId?.let { library?.area(it) }
     val rowActions = RowActions(
-        onOpen = { taskId = it.id },
+        selected = selection?.toSet(),
+        onOpen = { if (selection != null) toggleSelected(it.id) else taskId = it.id },
         onSetDone = viewModel::setDone,
         onTrash = viewModel::trash,
         onRestore = viewModel::restore,
@@ -551,10 +591,39 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
         )
     }
 
+    val picked = selection.orEmpty().mapNotNull { library?.task(it) }
+    if (selectionWhen && library != null) {
+        picked.firstOrNull { it.type == TaskType.TODO }?.let { first ->
+            WhenDialog(
+                task = first,
+                onPick = { schedule ->
+                    selectionWhen = false
+                    viewModel.rescheduleAll(picked.map { it.id }, schedule)
+                    selection = null
+                },
+                onDismiss = { selectionWhen = false },
+            )
+        } ?: run { selectionWhen = false }
+    }
+    if (selectionMove && library != null) {
+        PlaceDialog(
+            library = library,
+            isProject = picked.isNotEmpty() && picked.all { it.type == TaskType.PROJECT },
+            current = null,
+            title = R.string.move,
+            onPick = { destination ->
+                selectionMove = false
+                viewModel.moveAll(picked.map { it.id }, destination)
+                selection = null
+            },
+            onDismiss = { selectionMove = false },
+        )
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            if (library != null && taskId == null && tab != ListTab.TRASH) {
+            if (library != null && taskId == null && tab != ListTab.TRASH && selection == null) {
                 // In a project, an area or Projects, + offers what can be created there, as in Things.
                 val choices = buildList {
                     val project = projectId?.let { library.task(it) }
@@ -613,6 +682,37 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
             }
         },
         topBar = {
+            val selecting = selection
+            if (selecting != null && library != null) {
+                TopAppBar(
+                    title = { Text(pluralStringResource(R.plurals.selection_count, selecting.size, selecting.size)) },
+                    navigationIcon = {
+                        IconButton(onClick = { selection = null }) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.end_selection)) }
+                    },
+                    actions = {
+                        val any = picked.isNotEmpty()
+                        IconButton(onClick = { selectionWhen = true }, enabled = picked.any { library.canReschedule(it) && it.isOpen }) {
+                            Icon(Icons.Filled.DateRange, contentDescription = stringResource(R.string.reschedule))
+                        }
+                        IconButton(onClick = { selectionMove = true }, enabled = any && picked.any(library::canMove)) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.move))
+                        }
+                        IconButton(onClick = {
+                            viewModel.completeAll(picked.map { it.id })
+                            selection = null
+                        }, enabled = picked.any { it.type == TaskType.TODO && it.isOpen && library.canComplete(it) }) {
+                            Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.mark_done))
+                        }
+                        IconButton(onClick = {
+                            viewModel.trashAll(picked.map { it.id })
+                            selection = null
+                        }, enabled = picked.any(library::canTrash)) {
+                            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.move_to_trash))
+                        }
+                    },
+                )
+                return@Scaffold
+            }
             TopAppBar(
                 title = {
                     if (taskId == null && projectId == null && areaId == null) {
@@ -658,6 +758,11 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             }
                         }
                     } else {
+                        if (tab != ListTab.TRASH && tab != ListTab.AREAS || projectId != null || areaId != null) {
+                            IconButton(onClick = { selection = emptyList() }) {
+                                Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.select))
+                            }
+                        }
                         IconButton(onClick = {
                             query = ""
                             searching = true
@@ -794,7 +899,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             onDrop = { project, area, order -> viewModel.dropProject(project.id, area, order) },
                             onTrashProject = { viewModel.trash(it.id) },
                             onDeleteArea = { deletingAreaId = it.id },
-                        ) { projectId = it.id }
+                            selected = selection?.toSet(),
+                        ) { if (selection != null) toggleSelected(it.id) else projectId = it.id }
                         ListTab.AREAS -> AreaList(library, title, onOpen = { areaId = it.id }, onDelete = { deletingAreaId = it.id })
                         ListTab.TRASH -> TaskList(
                             library = library,
@@ -807,14 +913,6 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                                         TextButton(onClick = { deletingForever = deletable }, modifier = Modifier.padding(horizontal = 8.dp)) {
                                             Text(stringResource(R.string.empty_trash), color = MaterialTheme.colorScheme.error)
                                         }
-                                    }
-                                    if (trash.any { !library.canDeleteForever(it) }) {
-                                        Text(
-                                            stringResource(R.string.trash_kept_for_things),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                                        )
                                     }
                                 }
                             },
@@ -969,7 +1067,7 @@ private fun SearchScreen(
                     onReschedule = { actions.onReschedule(task) },
                     onTrash = { actions.onTrash(task.id) },
                 ) {
-                    if (task.type == TaskType.PROJECT) ProjectRow(library, task, actions.onOpen) else TaskRow(library, task, actions, showWhen = true)
+                    if (task.type == TaskType.PROJECT) ProjectRow(library, task, onOpen = actions.onOpen) else TaskRow(library, task, actions, showWhen = true)
                 }
             }
         }
@@ -977,6 +1075,8 @@ private fun SearchScreen(
 }
 
 private class RowActions(
+    /** While selecting: the ids picked; a tap picks or drops a row instead of opening it. */
+    val selected: Set<String>? = null,
     val onOpen: (Task) -> Unit,
     val onSetDone: (String, Boolean) -> Unit,
     val onTrash: (String) -> Unit,
@@ -1310,7 +1410,7 @@ private fun TaskList(
             null -> Unit
         }
     }
-    fun draggable(row: ListRow) = when (row) {
+    fun draggable(row: ListRow) = actions.selected == null && when (row) {
         is TaskItemRow -> onDrop != null && row.task.isOpen && library.canReorder(row.task)
         is HeaderRow -> onHeadingsDrop != null && row.group is Group.Heading
     }
@@ -1342,8 +1442,8 @@ private fun TaskList(
                         is TaskItemRow -> {
                             val task = row.task
                             SwipeActions(
-                                canReschedule = library.canReschedule(task) && task.isOpen,
-                                canTrash = library.canTrash(task),
+                                canReschedule = actions.selected == null && library.canReschedule(task) && task.isOpen,
+                                canTrash = actions.selected == null && library.canTrash(task),
                                 onReschedule = { actions.onReschedule(task) },
                                 onTrash = { actions.onTrash(task.id) },
                             ) {
@@ -1485,11 +1585,16 @@ private fun TaskRow(library: ThingsLibrary, task: Task, actions: RowActions, sho
             .padding(start = 8.dp, end = 16.dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ThingsCheckbox(
-            checked = task.status == TaskStatus.COMPLETED,
-            onCheckedChange = { actions.onSetDone(task.id, it) },
-            enabled = library.canComplete(task),
-        )
+        val selected = actions.selected
+        if (selected != null) {
+            SelectionMark(task.id in selected)
+        } else {
+            ThingsCheckbox(
+                checked = task.status == TaskStatus.COMPLETED,
+                onCheckedChange = { actions.onSetDone(task.id, it) },
+                enabled = library.canComplete(task),
+            )
+        }
         Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
             Text(
                 task.title,
@@ -1574,6 +1679,7 @@ private fun ProjectList(
     onDrop: ((project: Task, areaId: String?, order: List<String>) -> Unit)?,
     onTrashProject: (Task) -> Unit,
     onDeleteArea: (Area) -> Unit,
+    selected: Set<String>? = null,
     onOpen: (Task) -> Unit,
 ) {
     val projects = library.projects()
@@ -1606,17 +1712,17 @@ private fun ProjectList(
         }
         items(rows, key = { it.first }) { (key, value) ->
             val project = value as? Task
-            val canDrag = project != null && onDrop != null && library.canEditProject(project)
+            val canDrag = selected == null && project != null && onDrop != null && library.canEditProject(project)
             ReorderableItem(reorderState, key = key, enabled = canDrag) { dragging ->
                 val handle = if (canDrag) Modifier.longPressDraggableHandle(onDragStopped = { dropped(project!!) }) else Modifier
                 Box(handle.then(if (dragging) Modifier.shadow(8.dp) else Modifier).background(MaterialTheme.colorScheme.surface)) {
                     when (value) {
                         is Task -> SwipeActions(
                             canReschedule = false,
-                            canTrash = library.canTrash(value),
+                            canTrash = selected == null && library.canTrash(value),
                             onReschedule = {},
                             onTrash = { onTrashProject(value) },
-                        ) { ProjectRow(library, value, onOpen) }
+                        ) { ProjectRow(library, value, selected = selected?.let { value.id in it }, onOpen = onOpen) }
                         // Every area, even one without projects, opens on its own to-dos and projects as in Things.
                         // Swiped right, an area asks before it is deleted.
                         is Area -> SwipeActions(canReschedule = false, canTrash = true, onReschedule = {}, onTrash = { onDeleteArea(value) }) {
@@ -1783,11 +1889,12 @@ private fun AreaList(library: ThingsLibrary, title: String, onOpen: (Area) -> Un
 
 /** A project in a list: its circle, title and count of open to-dos. */
 @Composable
-private fun ProjectRow(library: ThingsLibrary, project: Task, onOpen: (Task) -> Unit) {
+private fun ProjectRow(library: ThingsLibrary, project: Task, selected: Boolean? = null, onOpen: (Task) -> Unit) {
     Row(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { onOpen(project) }.padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (selected != null) SelectionMark(selected, Modifier.padding(end = 4.dp))
         ListIcon(ListKind.PROJECT, size = 20.dp, progress = library.projectProgress(project.id))
         Spacer(Modifier.width(12.dp))
         Text(project.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -2221,4 +2328,23 @@ private fun TagsDialog(library: ThingsLibrary, selected: Set<String>, onSave: (L
         confirmButton = { TextButton(onClick = { onSave(picked) }, enabled = tags.isNotEmpty()) { Text(stringResource(R.string.save)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+/** A round mark for a picked (filled, with a check) or unpicked row while selecting. */
+@Composable
+private fun SelectionMark(picked: Boolean, modifier: Modifier = Modifier) {
+    val color = ListColors.checked
+    val label = stringResource(if (picked) R.string.selected else R.string.not_selected)
+    Box(modifier.size(48.dp).semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .size(22.dp)
+                .clip(CircleShape)
+                .background(if (picked) color else Color.Transparent)
+                .border(2.dp, color, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (picked) Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+        }
+    }
 }

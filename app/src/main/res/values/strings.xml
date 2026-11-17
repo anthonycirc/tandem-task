@@ -182,12 +182,11 @@
     <string name="repeat_pick_text">On %1$s</string>
     <string name="empty_trash">Empty Trash</string>
     <string name="delete_forever">Delete</string>
-    <string name="delete_forever_text">This can\'t be undone: they are deleted on all your devices.</string>
-    <string name="trash_kept_for_things">Projects and headings in the Trash are deleted in Things.</string>
+    <string name="delete_forever_text">This can\'t be undone: they are deleted on all your devices, with what is filed in the projects and headings.</string>
     <string name="deleted_forever">Deleted for good</string>
     <plurals name="delete_forever_title">
-        <item quantity="one">Delete this to-do for good?</item>
-        <item quantity="other">Delete %1$d to-dos for good?</item>
+        <item quantity="one">Delete this item for good?</item>
+        <item quantity="other">Delete %1$d items for good?</item>
     </plurals>
     <string name="now_repeats">Now repeats</string>
     <string name="search">Search</string>
@@ -209,4 +208,33 @@
     <string name="emoji_none">No emoji</string>
     <string name="tags_edit">Tags</string>
     <string name="tags_none">No tags in Things yet. Create them in Things.</string>
+    <plurals name="selection_trashed">
+        <item quantity="one">%d item moved to Trash</item>
+        <item quantity="other">%d items moved to Trash</item>
+    </plurals>
+    <plurals name="selection_done">
+        <item quantity="one">%d to-do checked</item>
+        <item quantity="other">%d to-dos checked</item>
+    </plurals>
+    <plurals name="selection_moved">
+        <item quantity="one">%d item moved</item>
+        <item quantity="other">%d items moved</item>
+    </plurals>
+    <plurals name="selection_rescheduled">
+        <item quantity="one">%d to-do rescheduled</item>
+        <item quantity="other">%d to-dos rescheduled</item>
+    </plurals>
+    <plurals name="selection_count">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+    <string name="select">Select</string>
+    <string name="end_selection">Done selecting</string>
+    <string name="selected">Selected</string>
+    <string name="not_selected">Not selected</string>
+    <string name="mark_done">Mark as done</string>
+    <plurals name="selection_partial">
+        <item quantity="one">%d skipped</item>
+        <item quantity="other">%d skipped</item>
+    </plurals>
 </resources>

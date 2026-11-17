@@ -12,6 +12,9 @@ data class WidgetChecks(val ticks: Map<String, Long> = emptyMap()) {
     fun toggle(id: String, token: Long): WidgetChecks =
         if (id in ticks) WidgetChecks(ticks - id) else WidgetChecks(ticks + (id to token))
 
+    /** Ticked by the tap [token], replacing an older tick of the same to-do. */
+    fun ticked(id: String, token: Long): WidgetChecks = WidgetChecks(ticks + (id to token))
+
     fun stillTicked(id: String, token: Long): Boolean = ticks[id] == token
 
     fun without(id: String): WidgetChecks = WidgetChecks(ticks - id)

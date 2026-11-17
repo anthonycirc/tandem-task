@@ -300,7 +300,8 @@ sealed interface PendingChange {
     data class DeleteArea(override val opId: String, val areaId: String) : PendingChange {
         override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
             val area = library.area(areaId) ?: return null
-            val trashed = library.areaContents(areaId).associate { it.id to TaskEdits.setTrashed(it, true, now) }
+            // Its projects and to-dos go to the Trash out of the area ({tr, ar: []}), as Things writes it.
+            val trashed = library.areaContents(areaId).associate { it.id to TaskEdits.trashOutOfArea(it, now) }
             return trashed + (areaId to TaskEdits.delete(area.entity))
         }
     }
@@ -354,13 +355,17 @@ sealed interface PendingChange {
     @SerialName("delete_forever")
     data class DeleteForever(override val opId: String, val taskIds: List<String>) : PendingChange {
         override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
-            val tasks = taskIds.distinct().mapNotNull(library::task).filter(library::canDeleteForever)
-            if (tasks.isEmpty()) return null
+            val picked = taskIds.distinct().mapNotNull(library::task).filter(library::canDeleteForever)
+            if (picked.isEmpty()) return null
+            // A project or heading goes with everything filed in it, as Things empties its Trash.
+            val tasks = (picked + picked.filter { it.type != TaskType.TODO }.flatMap { library.containedTasks(it.id) }).distinctBy { it.id }
             val deleted = tasks.map { it.id }.toSet()
             val payload = linkedMapOf<String, JsonObject>()
             for (task in tasks) {
-                val checklist = library.checklist(task.id).map { it.id }
                 payload[task.id] = TaskEdits.deleteForever("Task7")
+                // Projects and headings get no tombstone and have no checklist.
+                if (task.type != TaskType.TODO) continue
+                val checklist = library.checklist(task.id).map { it.id }
                 checklist.forEach { payload[it] = TaskEdits.deleteForever("ChecklistItem3") }
                 if (task.isRecurrenceTemplate) {
                     library.instancesOf(task.id).filter { it.id !in deleted }.forEach { payload[it.id] = TaskEdits.unlinkInstance() }
@@ -402,7 +407,7 @@ sealed interface PendingChange {
         }
     }
 
-    /** Sets a to-do's or project's tags; unknown tags are left out, the rest in Things' tag order. */
+    /** Sets a to-do's or project's known tags, in Things' tag order; tags the app does not know are kept. */
     @Serializable
     @SerialName("set_tags")
     data class SetTags(override val opId: String, val taskId: String, val tagIds: List<String>) : PendingChange {
@@ -412,9 +417,12 @@ sealed interface PendingChange {
             val task = library.task(taskId) ?: throw NoSuchElementException("The to-do no longer exists.")
             require(library.canTag(task)) { "This item can't be tagged from the app." }
             val wanted = tagIds.toSet()
-            val tags = library.tags().filter { it.id in wanted }.map { it.id }
-            if (tags == library.tags().filter { it.id in task.tagIds }.map { it.id }) return null
-            return mapOf(taskId to TaskEdits.setTags(task, tags, now))
+            val known = library.tags()
+            val tags = known.filter { it.id in wanted }.map { it.id }
+            if (tags == known.filter { it.id in task.tagIds }.map { it.id }) return null
+            // Tags the app does not know (not synced yet, or from an older Things) stay as they were.
+            val kept = task.tagIds.filter { id -> known.none { it.id == id } }
+            return mapOf(taskId to TaskEdits.setTags(task, tags + kept, now))
         }
     }
 

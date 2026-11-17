@@ -1,6 +1,7 @@
 package dev.thingscompanion.app.ui
 
 import android.app.Application
+import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -19,6 +20,8 @@ import dev.thingscompanion.cloud.Schedule
 import dev.thingscompanion.cloud.TaskFilter
 import dev.thingscompanion.cloud.ThingsCloudException
 import dev.thingscompanion.cloud.ThingsIds
+import dev.thingscompanion.cloud.StartList
+import dev.thingscompanion.cloud.TaskType
 import dev.thingscompanion.cloud.ThingsDay
 import dev.thingscompanion.cloud.ThingsLibrary
 import dev.thingscompanion.cloud.WidgetSnapshot
@@ -36,7 +39,15 @@ import java.time.LocalDate
 import java.time.LocalTime
 
 /** A message for the snackbar, resolved against the app's (localized) resources. */
-data class UiMessage(@StringRes val res: Int, val arg: Any? = null, val undo: PendingChange? = null)
+/** A snackbar: [res] with [arg], a plural resource counted by [arg] when [plural]; [undo] reverts it. */
+data class UiMessage(
+    val res: Int,
+    val arg: Any? = null,
+    val undo: List<PendingChange> = emptyList(),
+    val plural: Boolean = false,
+    /** A plural message shown first, counted by its own number (done, then skipped). */
+    val extra: Pair<Int, Int>? = null,
+)
 
 data class UiState(
     val signedIn: Boolean = false,
@@ -200,7 +211,7 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             try {
                 show(repository.enqueue(change))
-                done?.let { res -> _state.update { it.copy(message = UiMessage(res, undo = undo)) } }
+                done?.let { res -> _state.update { it.copy(message = UiMessage(res, undo = listOfNotNull(undo))) } }
                 runCatching { ListWidget.refreshAll(getApplication()) }
                 sendLater()
             } catch (e: CancellationException) {
@@ -356,7 +367,119 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
     fun deleteForever(ids: List<String>) = change(PendingChange.DeleteForever(newId(), ids), done = R.string.deleted_forever)
 
     /** The snackbar's Undo. */
-    fun undo(change: PendingChange) = change(change)
+    fun undo(changes: List<PendingChange>) = changeAll(changes)
+
+    /**
+     * Several changes from one action (a selection): each is applied on its own, the ones that do
+     * not apply are skipped, and one snackbar counts those that did, with one Undo for them all.
+     */
+    private fun changeAll(
+        changes: List<Pair<PendingChange, PendingChange?>>,
+        @PluralsRes done: Int? = null,
+        /** How many items were picked: the ones left out before sending count as skipped too. */
+        picked: Int = changes.size,
+    ) {
+        if (changes.isEmpty() && picked == 0 || blockedInDemo()) return
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            var applied = 0
+            val undo = mutableListOf<PendingChange>()
+            var failure: Exception? = null
+            for ((change, revert) in changes) {
+                try {
+                    show(repository.enqueue(change))
+                    applied++
+                    revert?.let(undo::add)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    failure = e
+                }
+            }
+            val skipped = picked - applied
+            when {
+                applied > 0 && done != null && skipped > 0 ->
+                    _state.update { it.copy(message = UiMessage(R.plurals.selection_partial, skipped, undo, plural = true, extra = done to applied)) }
+                applied > 0 && done != null -> _state.update { it.copy(message = UiMessage(done, applied, undo, plural = true)) }
+                applied == 0 && failure != null -> _state.update { it.copy(message = messageFor(failure)) }
+                applied == 0 && skipped > 0 -> _state.update { it.copy(message = UiMessage(R.plurals.selection_partial, skipped, plural = true)) }
+            }
+            if (applied > 0) {
+                runCatching { ListWidget.refreshAll(getApplication()) }
+                sendLater()
+            }
+        }
+    }
+
+    @JvmName("changeAllPlain")
+    private fun changeAll(changes: List<PendingChange>) = changeAll(changes.map { it to null })
+
+    /** Selection: to the Trash, with one Undo; items that can't go there are counted as skipped. */
+    fun trashAll(ids: List<String>) {
+        val library = _state.value.library ?: return
+        val day = ThingsDay.today().toEpochDay()
+        changeAll(
+            ids.filter { id -> library.task(id)?.let(library::canTrash) == true }
+                .map { PendingChange.SetTrashed(newId(), it, true, day = day) to PendingChange.SetTrashed(newId(), it, false) },
+            R.plurals.selection_trashed,
+            picked = ids.size,
+        )
+    }
+
+    /** Selection: checked off; Undo reopens them, except repeating ones (their next date has moved on). */
+    fun completeAll(ids: List<String>) {
+        val library = _state.value.library ?: return
+        val day = ThingsDay.today().toEpochDay()
+        changeAll(
+            ids.filter { id -> library.task(id)?.let { it.type == TaskType.TODO && it.isOpen && library.canComplete(it) } == true }
+                .map { id ->
+                    val revert = PendingChange.SetDone(newId(), id, false, day = day).takeIf { library.task(id)?.isRepeating == false }
+                    PendingChange.SetDone(newId(), id, true, day = day) to revert
+                },
+            R.plurals.selection_done,
+            picked = ids.size,
+        )
+    }
+
+    /**
+     * Selection: to-dos to [to]; projects to its area (or none) only when only projects were
+     * picked. In a mixed selection the place is the to-dos', so projects stay where they are.
+     */
+    fun moveAll(ids: List<String>, to: PendingChange.Destination) {
+        val library = _state.value.library ?: return
+        val onlyProjects = ids.all { library.task(it)?.type == TaskType.PROJECT }
+        changeAll(
+            ids.mapNotNull { id ->
+                val item = library.task(id)?.takeIf(library::canMove) ?: return@mapNotNull null
+                if (item.type == TaskType.PROJECT && !onlyProjects) return@mapNotNull null
+                val change = if (item.type == TaskType.PROJECT) {
+                    // A project goes to an area or out of one; picked a project or heading, it stays.
+                    if (to.projectId != null || to.headingId != null) return@mapNotNull null
+                    PendingChange.MoveProject(newId(), id, to.areaId)
+                } else {
+                    PendingChange.MoveTask(newId(), id, to)
+                }
+                change to null
+            },
+            R.plurals.selection_moved,
+            picked = ids.size,
+        )
+    }
+
+    /** Selection: a new When for each to-do, its reminder kept when there is still a day. */
+    fun rescheduleAll(ids: List<String>, schedule: Schedule) {
+        val library = _state.value.library ?: return
+        changeAll(
+            ids.mapNotNull { library.task(it) }.filter { task ->
+                // Closed to-dos stay; a repeating occurrence keeps its reminder and never goes to the Inbox.
+                library.canReschedule(task) && task.isOpen && !(task.isRepeating && (schedule.start == StartList.INBOX || (task.reminder != null && schedule.date == null)))
+            }.map { task ->
+                val reminder = task.reminder?.takeIf { schedule.date != null }
+                PendingChange.EditTask(newId(), task.id, task.title, task.notes.orEmpty(), PendingChange.When.of(schedule), reminder?.toSecondOfDay()) to null
+            },
+            R.plurals.selection_rescheduled,
+            picked = ids.size,
+        )
+    }
 
     fun discardPending() {
         viewModelScope.launch {

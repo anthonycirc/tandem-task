@@ -43,4 +43,11 @@ class WidgetChecksTest {
         assertTrue(checks.prunedAt(muchLater).stillTicked("a", 1_000))
         assertFalse(checks.prunedAt(1_000 + 25 * 60 * 60_000L).isTicked("a"))
     }
+
+    @Test
+    fun `ticking again replaces the older tap, whose send then does nothing`() {
+        val again = WidgetChecks().toggle("a", 1).ticked("a", 2)
+        assertTrue(again.stillTicked("a", 2))
+        assertFalse(again.stillTicked("a", 1))
+    }
 }

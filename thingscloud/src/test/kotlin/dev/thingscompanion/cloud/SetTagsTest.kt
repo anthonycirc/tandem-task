@@ -47,9 +47,19 @@ class SetTagsTest {
     }
 
     @Test
-    fun `unchanged tags write nothing, unknown and legacy tags are left out`() {
+    fun `unchanged tags write nothing, and unknown tags cannot be added`() {
         assertNull(tag("todo", "work"))
         assertNull(tag("todo", "work", "old", "missing"))
+    }
+
+    @Test
+    fun `tags the app does not know stay on the item when its other tags change`() {
+        val lib = ThingsLibrary.from(HistoryState().apply {
+            apply(WireParser.parseItem(Json.parseToJsonElement(seed) as JsonObject))
+            apply(WireParser.parseItem(Json.parseToJsonElement("""{"todo": {"t": 1, "e": "Task6", "p": {"tg": ["work", "notSynced", "old"]}}}""") as JsonObject))
+        })
+        val payload = PendingChange.SetTags("op", "todo", listOf("home")).build(lib, now)!!
+        assertEquals("""["home","notSynced","old"]""", payload.getValue("todo").getValue("p").jsonObject["tg"].toString())
     }
 
     @Test

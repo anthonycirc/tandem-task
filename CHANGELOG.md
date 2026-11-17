@@ -2,6 +2,20 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-11-17
+
+### Added
+
+- **Select several to-dos or projects.** The check button in the top bar starts a selection: tap rows to pick them, then reschedule, move, check off or trash them all at once (trashing and checking off have one Undo). Items that can't take the action are skipped and counted; in a selection of to-dos and projects, a move applies to the to-dos.
+- **Empty projects and headings from the Trash.** A trashed project now goes for good with its headings, to-dos and checklists, and a trashed heading with its to-dos, as Things empties its Trash.
+
+### Fixed
+
+- Deleting an area also takes its projects and to-dos out of the area, as Things does, so nothing keeps pointing at the deleted area.
+- **Undo was never offered**: snackbars vanished as soon as they appeared. They now show, with Undo, and a newer one replaces the one showing.
+- Tags the app doesn't know (not synced yet) stay on an item when its tags change.
+- A widget tap on a check it no longer shows checks again instead of cancelling the late send.
+
 ## [0.3.10] - 2026-11-17
 
 ### Added

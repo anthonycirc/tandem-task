@@ -256,6 +256,10 @@ object TaskEdits {
     }
 
     /** Moves a to-do to the Trash, or back (`tr`). */
+    /** A project or to-do of a deleted area: to the Trash and out of the area. */
+    fun trashOutOfArea(task: Task, now: Double): JsonObject =
+        update(task.entity, mapOf("tr" to JsonPrimitive(true), "ar" to JsonArray(emptyList())), now)
+
     fun setTrashed(task: Task, trashed: Boolean, now: Double): JsonObject =
         update(task.entity, mapOf("tr" to JsonPrimitive(trashed)), now)
 

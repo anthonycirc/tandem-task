@@ -184,12 +184,11 @@
     <string name="repeat_pick_text">Le %1$s</string>
     <string name="empty_trash">Vider la corbeille</string>
     <string name="delete_forever">Supprimer</string>
-    <string name="delete_forever_text">Action irréversible : la suppression s\'applique à tous les appareils.</string>
-    <string name="trash_kept_for_things">Les projets et en-têtes de la corbeille se suppriment dans Things.</string>
+    <string name="delete_forever_text">Action irréversible : la suppression s\'applique à tous les appareils, avec le contenu des projets et en-têtes.</string>
     <string name="deleted_forever">Supprimé définitivement</string>
     <plurals name="delete_forever_title">
-        <item quantity="one">Supprimer définitivement cette tâche ?</item>
-        <item quantity="other">Supprimer définitivement %1$d tâches ?</item>
+        <item quantity="one">Supprimer définitivement cet élément ?</item>
+        <item quantity="other">Supprimer définitivement %1$d éléments ?</item>
     </plurals>
     <string name="now_repeats">Répétition activée</string>
     <string name="search">Rechercher</string>
@@ -211,4 +210,33 @@
     <string name="emoji_none">Sans emoji</string>
     <string name="tags_edit">Tags</string>
     <string name="tags_none">Aucun tag dans Things pour l’instant. Crée-les dans Things.</string>
+    <plurals name="selection_trashed">
+        <item quantity="one">%d élément mis à la corbeille</item>
+        <item quantity="other">%d éléments mis à la corbeille</item>
+    </plurals>
+    <plurals name="selection_done">
+        <item quantity="one">%d to-do cochée</item>
+        <item quantity="other">%d to-dos cochées</item>
+    </plurals>
+    <plurals name="selection_moved">
+        <item quantity="one">%d élément déplacé</item>
+        <item quantity="other">%d éléments déplacés</item>
+    </plurals>
+    <plurals name="selection_rescheduled">
+        <item quantity="one">%d to-do reprogrammée</item>
+        <item quantity="other">%d to-dos reprogrammées</item>
+    </plurals>
+    <plurals name="selection_count">
+        <item quantity="one">%d sélectionné</item>
+        <item quantity="other">%d sélectionnés</item>
+    </plurals>
+    <string name="select">Sélectionner</string>
+    <string name="end_selection">Terminer la sélection</string>
+    <string name="selected">Sélectionné</string>
+    <string name="not_selected">Non sélectionné</string>
+    <string name="mark_done">Marquer comme terminé</string>
+    <plurals name="selection_partial">
+        <item quantity="one">%d ignoré</item>
+        <item quantity="other">%d ignorés</item>
+    </plurals>
 </resources>

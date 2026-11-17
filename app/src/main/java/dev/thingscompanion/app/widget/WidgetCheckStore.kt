@@ -12,7 +12,10 @@ object WidgetCheckStore {
     private val lock = Any()
 
     /** Ticks the widget shows: a tick whose send has not run after [SHOWN_FOR_MS] is no longer shown. */
-    fun read(context: Context): WidgetChecks = stored(context).freshAt(System.currentTimeMillis(), SHOWN_FOR_MS)
+    fun read(context: Context): WidgetChecks = shown(stored(context), System.currentTimeMillis())
+
+    /** The ticks of [checks] the widget shows at [nowMillis]. */
+    fun shown(checks: WidgetChecks, nowMillis: Long): WidgetChecks = checks.freshAt(nowMillis, SHOWN_FOR_MS)
 
     /** Applies [change] to every pending tick, however old, and returns them before and after it. */
     fun update(context: Context, change: (WidgetChecks) -> WidgetChecks): Pair<WidgetChecks, WidgetChecks> = synchronized(lock) {

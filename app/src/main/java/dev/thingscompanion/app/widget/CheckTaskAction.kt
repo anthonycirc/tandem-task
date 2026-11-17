@@ -16,7 +16,11 @@ class CheckTaskAction : ActionCallback {
         val id = parameters[TASK_ID] ?: return
         Log.d(TAG, "tick from widget")
         val token = System.currentTimeMillis()
-        val (_, ticked) = WidgetCheckStore.update(context) { it.toggle(id, token) }
+        // A tap unticks what the widget shows ticked; a tick it no longer shows (its send is late)
+        // is ticked again by this tap, so the tap does what the user sees.
+        val (_, ticked) = WidgetCheckStore.update(context) { stored ->
+            if (WidgetCheckStore.shown(stored, token).isTicked(id)) stored.without(id) else stored.ticked(id, token)
+        }
         ListWidget.refreshAll(context)
         if (ticked.isTicked(id)) WidgetCheckWorker.schedule(context, id, token, CHECK_DELAY_MS)
     }
