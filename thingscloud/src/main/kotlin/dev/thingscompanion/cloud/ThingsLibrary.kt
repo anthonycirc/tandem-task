@@ -62,7 +62,7 @@ data class ProjectSection(val heading: Task?, val tasks: List<Task>)
 
 data class Area(val id: String, val title: String, val index: Int, internal val entity: String? = "Area3")
 
-data class Tag(val id: String, val title: String)
+data class Tag(val id: String, val title: String, val index: Int = 0)
 
 data class ChecklistItem(
     val id: String,
@@ -77,7 +77,7 @@ data class ChecklistItem(
 class ThingsLibrary private constructor(
     private val tasks: Map<String, Task>,
     private val areas: Map<String, Area>,
-    private val tags: Map<String, String>,
+    private val tags: Map<String, Tag>,
     private val checklists: Map<String, List<ChecklistItem>>,
 ) {
     fun task(id: String): Task? = tasks[id]
@@ -86,9 +86,10 @@ class ThingsLibrary private constructor(
 
     fun areas(): List<Area> = areas.values.sortedWith(compareBy<Area>({ it.index }, { it.id }))
 
-    fun tagTitles(task: Task): List<String> = task.tagIds.mapNotNull { tags[it] }
+    /** In Things' own tag order, as the Things apps show them. */
+    fun tagTitles(task: Task): List<String> = task.tagIds.mapNotNull { tags[it] }.sortedWith(tagOrder).map { it.title }
 
-    fun tags(): List<Tag> = tags.map { (id, title) -> Tag(id, title) }.sortedBy { it.title.lowercase() }
+    fun tags(): List<Tag> = tags.values.sortedWith(tagOrder)
 
     fun checklist(taskId: String): List<ChecklistItem> = checklists[taskId].orEmpty()
 
@@ -306,6 +307,15 @@ class ThingsLibrary private constructor(
     companion object {
         private const val MIN_TASK_ENTITY_VERSION = 6
 
+        // Older areas and tags (Area2, Tag3) were replaced by Things' migration and are gone from its apps.
+        private const val MIN_AREA_ENTITY_VERSION = 3
+        private const val MIN_TAG_ENTITY_VERSION = 4
+
+        private val tagOrder = compareBy<Tag>({ it.index }, { it.title.lowercase() }, { it.id })
+
+        private fun StoredObject.isCurrent(kind: String, min: Int) =
+            entity?.takeIf { it.startsWith(kind) }?.removePrefix(kind)?.toIntOrNull()?.let { it >= min } ?: false
+
         fun from(state: HistoryState): ThingsLibrary {
             val raw = state.objects
             val rawTasks = raw.filterValues { it.entity?.startsWith("Task") == true }
@@ -317,7 +327,7 @@ class ThingsLibrary private constructor(
             fun directArea(id: String?) = id?.let { rawTasks[it]?.props }?.let { firstId(it, "ar") }
 
             // A project or to-do may still name an area deleted since: it then has none.
-            val areaIds = raw.filterValues { it.entity?.startsWith("Area") == true }.keys
+            val areaIds = raw.filterValues { it.isCurrent("Area", MIN_AREA_ENTITY_VERSION) }.keys
             val tasks = rawTasks.mapValues { (id, obj) ->
                 val p = obj.props
                 val heading = firstId(p, "agr")
@@ -353,11 +363,11 @@ class ThingsLibrary private constructor(
                 )
             }
 
-            val areas = raw.filterValues { it.entity?.startsWith("Area") == true }.mapValues { (id, obj) ->
+            val areas = raw.filterValues { it.isCurrent("Area", MIN_AREA_ENTITY_VERSION) }.mapValues { (id, obj) ->
                 Area(id, obj.props["tt"].stringOrNull().orEmpty(), obj.props.int("ix") ?: 0, obj.entity)
             }
-            val tags = raw.filterValues { it.entity?.startsWith("Tag") == true }
-                .mapValues { (_, obj) -> obj.props["tt"].stringOrNull().orEmpty() }
+            val tags = raw.filterValues { it.isCurrent("Tag", MIN_TAG_ENTITY_VERSION) }
+                .mapValues { (id, obj) -> Tag(id, obj.props["tt"].stringOrNull().orEmpty(), obj.props.int("ix") ?: 0) }
             val checklists = raw.filterValues { it.entity?.startsWith("ChecklistItem") == true }
                 .mapNotNull { (id, obj) ->
                     val owner = firstId(obj.props, "ts") ?: obj.props["ts"].stringOrNull() ?: return@mapNotNull null
