@@ -677,6 +677,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
         )
     }
 
+    // Areas folded closed, shared by the Projects list and the side menu.
+    var foldedAreas by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val drawer = state.navLayout == NavLayout.DRAWER
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val drawerScope = rememberCoroutineScope()
@@ -941,6 +943,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             onTrashProject = { viewModel.trash(it.id) },
                             onDeleteArea = { deletingAreaId = it.id },
                             selected = selection?.toSet(),
+                            folded = foldedAreas,
+                            onFold = { foldedAreas = it },
                         ) { if (selection != null) toggleSelected(it.id) else projectId = it.id }
                         ListTab.TRASH -> TaskList(
                             library = library,
@@ -1021,10 +1025,25 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
             drawerContent = {
                 ModalDrawerSheet {
                     SideMenu(
+                        library = library,
                         lists = if (tab in shownTabs) shownTabs else shownTabs + tab,
                         current = tab.takeIf { projectId == null && areaId == null },
+                        currentPlace = projectId ?: areaId,
+                        folded = foldedAreas,
+                        onFold = { foldedAreas = it },
                         onOpen = { list ->
                             openList(list)
+                            drawerScope.launch { drawerState.close() }
+                        },
+                        onOpenArea = { id ->
+                            taskId = null
+                            projectId = null
+                            areaId = id
+                            drawerScope.launch { drawerState.close() }
+                        },
+                        onOpenProject = { id ->
+                            taskId = null
+                            projectId = id
                             drawerScope.launch { drawerState.close() }
                         },
                     )
@@ -1884,12 +1903,13 @@ private fun ProjectList(
     onTrashProject: (Task) -> Unit,
     onDeleteArea: (Area) -> Unit,
     selected: Set<String>? = null,
+    folded: List<String> = emptyList(),
+    onFold: (List<String>) -> Unit = {},
     onOpen: (Task) -> Unit,
 ) {
     val projects = library.projects()
     val areas = library.areas()
-    // Areas folded closed: their projects are hidden under the header.
-    var folded by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    // Areas folded closed ([folded]): their projects are hidden under the header.
     // Area headers (the first, with no area, draws nothing) and projects, in display order.
     val built = remember(library, folded) {
         listOf<Pair<String, Any?>>("area-none" to null) + projects.filter { it.areaId == null }.map { it.id to it } +
@@ -1960,7 +1980,7 @@ private fun ProjectList(
                                     if (count > 0) {
                                         Text(count.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    IconButton(onClick = { folded = if (isFolded) folded - value.id else folded + value.id }) {
+                                    IconButton(onClick = { onFold(if (isFolded) folded - value.id else folded + value.id) }) {
                                         Icon(
                                             if (isFolded) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
                                             contentDescription = stringResource(if (isFolded) R.string.unfold_area else R.string.fold_area),
@@ -2676,9 +2696,22 @@ private fun SelectionMark(picked: Boolean, modifier: Modifier = Modifier) {
 private fun foldForSearch(text: String): String =
     java.text.Normalizer.normalize(text.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "")
 
-/** The side menu's content: the app's name, then the lists, the open one highlighted. */
+/**
+ * The side menu's content, as Things' sidebar: the app's name, the lists, then the projects with no
+ * area and each area with its projects (an area folds away under its arrow). The open place is highlighted.
+ */
 @Composable
-private fun SideMenu(lists: List<ListTab>, current: ListTab?, onOpen: (ListTab) -> Unit) {
+private fun SideMenu(
+    library: ThingsLibrary?,
+    lists: List<ListTab>,
+    current: ListTab?,
+    currentPlace: String?,
+    folded: List<String>,
+    onFold: (List<String>) -> Unit,
+    onOpen: (ListTab) -> Unit,
+    onOpenArea: (String) -> Unit,
+    onOpenProject: (String) -> Unit,
+) {
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
         Text(
             stringResource(R.string.app_name),
@@ -2694,6 +2727,38 @@ private fun SideMenu(lists: List<ListTab>, current: ListTab?, onOpen: (ListTab) 
                 onClick = { onOpen(list) },
                 modifier = Modifier.padding(horizontal = 12.dp),
             )
+        }
+        if (library == null) return@Column
+        @Composable
+        fun ProjectItem(project: Task) {
+            NavigationDrawerItem(
+                label = { Text(project.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                icon = { ListIcon(ListKind.PROJECT, size = 20.dp, progress = library.projectProgress(project.id)) },
+                selected = project.id == currentPlace,
+                onClick = { onOpenProject(project.id) },
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
+        }
+        HorizontalDivider(Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
+        library.projects().filter { it.areaId == null }.forEach { ProjectItem(it) }
+        library.areas().forEach { area ->
+            val isFolded = area.id in folded
+            NavigationDrawerItem(
+                label = { Text(area.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                icon = { ListIcon(ListKind.AREA, size = 20.dp) },
+                badge = {
+                    IconButton(onClick = { onFold(if (isFolded) folded - area.id else folded + area.id) }) {
+                        Icon(
+                            if (isFolded) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
+                            contentDescription = stringResource(if (isFolded) R.string.unfold_area else R.string.fold_area),
+                        )
+                    }
+                },
+                selected = area.id == currentPlace,
+                onClick = { onOpenArea(area.id) },
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
+            if (!isFolded) library.areaProjects(area.id).forEach { ProjectItem(it) }
         }
     }
 }

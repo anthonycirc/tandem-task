@@ -2,6 +2,12 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.7] - 2026-11-19
+
+### Added
+
+- **Areas and projects in the side menu**, as in Things' sidebar: under the lists, the projects with no area, then each area with its projects and their progress circles. An area's arrow folds its projects away, in the menu and in Projects alike; tapping an area or a project opens it.
+
 ## [0.4.6] - 2026-11-19
 
 ### Added
