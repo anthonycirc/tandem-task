@@ -2,6 +2,17 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-11-19
+
+### Added
+
+- **Change When and place from the details.** In a to-do's details, tap When to reschedule it and its project or area to move it; on a project's page, tap its When or its area. Tags have their own icon, like the other facts.
+
+### Changed
+
+- The selection button now shows checked boxes, so it no longer reads as "mark done".
+- **Swiping to the Trash needs half the width.** A row goes to the Trash only when dragged at least halfway across; a short or quick swipe slides back. Rescheduling (swipe left) is unchanged.
+
 ## [0.4.0] - 2026-11-17
 
 ### Added

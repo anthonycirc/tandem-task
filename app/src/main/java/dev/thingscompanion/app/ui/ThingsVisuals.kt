@@ -233,3 +233,40 @@ fun TagPill(title: String) {
             .padding(horizontal = 7.dp, vertical = 1.dp),
     )
 }
+
+/** A tag, as Things draws it: a label with a hole, pointing left. */
+@Composable
+fun TagGlyph(color: Color, modifier: Modifier = Modifier, size: Dp = 16.dp) {
+    Canvas(modifier.size(size)) {
+        val w = this.size.width
+        val tag = Path().apply {
+            moveTo(w * 0.08f, w * 0.5f)
+            lineTo(w * 0.38f, w * 0.18f)
+            lineTo(w * 0.92f, w * 0.18f)
+            lineTo(w * 0.92f, w * 0.82f)
+            lineTo(w * 0.38f, w * 0.82f)
+            close()
+        }
+        drawPath(tag, color, style = Stroke(width = w * 0.1f, join = StrokeJoin.Round))
+        drawCircle(color, radius = w * 0.07f, center = Offset(w * 0.4f, w * 0.5f))
+    }
+}
+
+/** "Select several": two checked boxes with their lines, so it doesn't read as "mark done". */
+@Composable
+fun SelectGlyph(color: Color, modifier: Modifier = Modifier, size: Dp = 24.dp) {
+    Canvas(modifier.size(size)) {
+        val w = this.size.width
+        val stroke = Stroke(width = w * 0.08f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        listOf(0.1f, 0.56f).forEach { top ->
+            drawRoundRect(color, topLeft = Offset(w * 0.06f, w * top), size = Size(w * 0.34f, w * 0.34f), cornerRadius = CornerRadius(w * 0.08f), style = stroke)
+            val check = Path().apply {
+                moveTo(w * 0.13f, w * (top + 0.17f))
+                lineTo(w * 0.21f, w * (top + 0.25f))
+                lineTo(w * 0.34f, w * (top + 0.09f))
+            }
+            drawPath(check, color, style = stroke)
+            drawLine(color, Offset(w * 0.52f, w * (top + 0.17f)), Offset(w * 0.94f, w * (top + 0.17f)), strokeWidth = w * 0.08f, cap = StrokeCap.Round)
+        }
+    }
+}

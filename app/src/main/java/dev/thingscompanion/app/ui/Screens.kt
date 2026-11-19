@@ -117,6 +117,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -759,8 +760,9 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                         }
                     } else {
                         if (tab != ListTab.TRASH && tab != ListTab.AREAS || projectId != null || areaId != null) {
-                            IconButton(onClick = { selection = emptyList() }) {
-                                Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.select))
+                            val selectLabel = stringResource(R.string.select)
+                            IconButton(onClick = { selection = emptyList() }, modifier = Modifier.semantics { contentDescription = selectLabel }) {
+                                SelectGlyph(LocalContentColor.current)
                             }
                         }
                         IconButton(onClick = {
@@ -802,6 +804,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                     onRestore = viewModel::restore,
                     onDeleteForever = { deletingForever = listOf(it) },
                     onTags = { taggingId = it },
+                    onReschedule = { schedulingId = it },
+                    onMove = { movingId = it },
                 )
                 openProject != null -> {
                     if (!filter.isEmpty) ActiveFilters(library, filter, viewModel::setFilter)
@@ -819,6 +823,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                                 },
                                 onStatus = { viewModel.setProjectStatus(openProject.id, it) },
                                 onTags = { taggingId = openProject.id },
+                                onReschedule = { schedulingId = openProject.id },
                             )
                         },
                         // Things' headings; with a filter on, headings left empty are hidden.
@@ -1459,9 +1464,13 @@ private fun TaskList(
     }
 }
 
+/** How far a row must be dragged to the right, as a share of its width, before it goes to the Trash. */
+private const val TRASH_SWIPE_SHARE = 0.5f
+
 /**
  * Row swipes: to the left opens When to reschedule (the more frequent action gets the easier
- * gesture), to the right moves the to-do to the Trash (the snackbar offers Undo).
+ * gesture), to the right moves the to-do to the Trash (the snackbar offers Undo). The Trash needs
+ * the row dragged at least halfway across: a short fling slides back instead of deleting.
  */
 @Composable
 private fun SwipeActions(
@@ -1478,6 +1487,9 @@ private fun SwipeActions(
     // A row that stays (the change was refused, or demo mode) gets a fresh swipe state: reset() leaves
     // material3 1.3 half-dismissed on the next tap.
     var generation by remember { mutableIntStateOf(0) }
+    var width by remember { mutableIntStateOf(0) }
+    // The state is read by its own confirmation, for how far the row was dragged.
+    val holder = remember { arrayOfNulls<androidx.compose.material3.SwipeToDismissBoxState>(1) }
     val swipe = key(generation) {
         rememberSwipeToDismissBoxState(
             confirmValueChange = {
@@ -1488,13 +1500,18 @@ private fun SwipeActions(
                         false
                     }
                     SwipeToDismissBoxValue.StartToEnd -> {
-                        onTrash()
-                        true
+                        val dragged = holder[0]?.let { state -> runCatching { state.requireOffset() }.getOrNull() } ?: 0f
+                        if (width > 0 && dragged >= width * TRASH_SWIPE_SHARE) {
+                            onTrash()
+                            true
+                        } else {
+                            false
+                        }
                     }
                     SwipeToDismissBoxValue.Settled -> true
                 }
             },
-        )
+        ).also { holder[0] = it }
     }
     LaunchedEffect(swipe.currentValue) {
         if (swipe.currentValue != SwipeToDismissBoxValue.Settled) {
@@ -1504,6 +1521,7 @@ private fun SwipeActions(
     }
     SwipeToDismissBox(
         state = swipe,
+        modifier = Modifier.onSizeChanged { width = it.width },
         enableDismissFromStartToEnd = canTrash,
         enableDismissFromEndToStart = canReschedule,
         backgroundContent = {
@@ -1547,7 +1565,7 @@ private fun WhenDialog(task: Task, onPick: (Schedule) -> Unit, onDismiss: () -> 
         add(Triple(ListKind.UPCOMING, stringResource(R.string.pick_date)) { pickingDate = true })
         add(Triple(ListKind.ANYTIME, stringResource(R.string.list_anytime)) { onPick(Schedule.Anytime) })
         add(Triple(ListKind.SOMEDAY, stringResource(R.string.list_someday)) { onPick(Schedule.Someday) })
-        if (task.projectId == null && task.areaId == null) add(Triple(ListKind.INBOX, stringResource(R.string.list_inbox)) { onPick(Schedule.Inbox) })
+        if (task.type == TaskType.TODO && task.projectId == null && task.areaId == null) add(Triple(ListKind.INBOX, stringResource(R.string.list_inbox)) { onPick(Schedule.Inbox) })
     }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1762,6 +1780,7 @@ private fun ProjectHeader(
     onTrash: () -> Unit,
     onStatus: (TaskStatus) -> Unit,
     onTags: () -> Unit = {},
+    onReschedule: () -> Unit = {},
 ) {
     val editable = library.canEditProject(project)
     var confirming by remember { mutableStateOf<TaskStatus?>(null) }
@@ -1838,13 +1857,39 @@ private fun ProjectHeader(
                 }
             }
         }
-        // When and deadline, as under a to-do's title.
-        val facts = listOfNotNull(
-            project.startDate?.format(dateFormat),
-            project.deadline?.let { stringResource(R.string.deadline) + " " + it.format(dateFormat) },
-        )
-        if (facts.isNotEmpty()) {
-            Text(facts.joinToString("  ·  "), Modifier.padding(start = 44.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // When, area and deadline, as in a to-do's details: a tap on When or the area changes it.
+        val muted = MaterialTheme.colorScheme.onSurfaceVariant
+        val small = MaterialTheme.typography.labelLarge
+        FlowRow(Modifier.padding(start = 36.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.Center) {
+            val (whenKind, whenLabel) = whenFact(project)
+            Row(
+                Modifier.clip(MaterialTheme.shapes.small)
+                    .clickable(enabled = editable, onClickLabel = stringResource(R.string.reschedule), onClick = onReschedule)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ListIcon(whenKind, size = 14.dp)
+                Spacer(Modifier.width(4.dp))
+                Text(whenLabel, style = small, color = muted)
+            }
+            Row(
+                Modifier.clip(MaterialTheme.shapes.small)
+                    .clickable(enabled = editable, onClickLabel = stringResource(R.string.move_to_area), onClick = onMove)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val area = project.areaId?.let { library.area(it)?.title }
+                ListIcon(ListKind.AREA, size = 14.dp)
+                Spacer(Modifier.width(4.dp))
+                Text(area ?: stringResource(R.string.no_area), style = small, color = muted)
+            }
+            project.deadline?.let {
+                Row(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    DeadlineFlag()
+                    Spacer(Modifier.width(4.dp))
+                    Text(it.format(dateFormat), style = small, color = ListColors.deadline)
+                }
+            }
         }
         val tags = library.tagTitles(project)
         if (tags.isNotEmpty()) {
@@ -1915,6 +1960,8 @@ private fun TaskDetail(
     onRestore: (String) -> Unit,
     onDeleteForever: (String) -> Unit,
     onTags: (String) -> Unit = {},
+    onReschedule: (String) -> Unit = {},
+    onMove: (String) -> Unit = {},
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val focusManager = LocalFocusManager.current
@@ -2024,46 +2071,78 @@ private fun TaskDetail(
         }
 
         HorizontalDivider(Modifier.padding(horizontal = 12.dp))
-        DetailFacts(library, task, onTags = { onTags(task.id) }.takeIf { library.canTag(task) })
+        DetailFacts(
+            library,
+            task,
+            onTags = { onTags(task.id) }.takeIf { library.canTag(task) },
+            onWhen = { onReschedule(task.id) }.takeIf { library.canReschedule(task) && task.isOpen },
+            onPlace = { onMove(task.id) }.takeIf { library.canMove(task) },
+        )
     }
 }
 
-/** When, reminder, deadline, project and tags, each with its icon. */
+/** Where a to-do or project is scheduled, as the icon and name of its list (a later day by its date). */
+@Composable
+private fun whenFact(task: Task): Pair<ListKind, String> {
+    val today = ThingsDay.today()
+    val startDate = task.startDate
+    return when {
+        task.start == StartList.INBOX && startDate == null -> ListKind.INBOX to stringResource(R.string.list_inbox)
+        startDate == null -> if (task.start == StartList.SOMEDAY) ListKind.SOMEDAY to stringResource(R.string.list_someday)
+        else ListKind.ANYTIME to stringResource(R.string.list_anytime)
+        startDate.isAfter(today) -> ListKind.UPCOMING to startDate.format(dateFormat)
+        task.evening -> ListKind.EVENING to stringResource(R.string.this_evening)
+        else -> ListKind.TODAY to stringResource(R.string.list_today)
+    }
+}
+
+/**
+ * When, reminder, deadline, place and tags, each with its icon. When, place and tags open their
+ * picker on a tap, when the item can take the change.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DetailFacts(library: ThingsLibrary, task: Task, onTags: (() -> Unit)? = null) {
+private fun DetailFacts(
+    library: ThingsLibrary,
+    task: Task,
+    onTags: (() -> Unit)? = null,
+    onWhen: (() -> Unit)? = null,
+    onPlace: (() -> Unit)? = null,
+) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val today = ThingsDay.today()
-    Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        val startDate = task.startDate
-        val whenFact: Pair<ListKind, String>? = when {
-            task.start == dev.thingscompanion.cloud.StartList.INBOX && startDate == null -> ListKind.INBOX to stringResource(R.string.list_inbox)
-            startDate == null -> if (task.start == dev.thingscompanion.cloud.StartList.SOMEDAY) ListKind.SOMEDAY to stringResource(R.string.list_someday)
-            else ListKind.ANYTIME to stringResource(R.string.list_anytime)
-            startDate.isAfter(today) -> ListKind.UPCOMING to startDate.format(dateFormat)
-            task.evening -> ListKind.EVENING to stringResource(R.string.this_evening)
-            else -> ListKind.TODAY to stringResource(R.string.list_today)
-        }
-        whenFact?.let { (kind, label) -> Fact({ ListIcon(kind, size = 18.dp) }, label) }
+    Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        val (whenKind, whenLabel) = whenFact(task)
+        Fact({ ListIcon(whenKind, size = 18.dp) }, whenLabel, onClick = onWhen, clickLabel = stringResource(R.string.reschedule))
         task.reminder?.let { Fact({ Icon(Icons.Filled.Notifications, null, Modifier.size(18.dp), tint = muted) }, it.format(timeFormat)) }
         library.repeatRule(task)?.let { rule ->
             Fact({ RepeatGlyph(muted, size = 18.dp) }, describeRepeat(LocalContext.current, rule))
         }
         task.deadline?.let { Fact({ DeadlineFlag(size = 16.dp) }, stringResource(R.string.due_date, it.format(dateFormat)), ListColors.deadline) }
-        (task.projectId?.let { library.task(it)?.title } ?: task.areaId?.let { library.area(it)?.title })?.let {
-            Fact({ ListIcon(ListKind.PROJECT, size = 18.dp) }, it)
+        val project = task.projectId?.let { library.task(it) }
+        val place = project?.title ?: task.areaId?.let { library.area(it)?.title }
+        if (place != null || onPlace != null) {
+            Fact(
+                { ListIcon(if (project != null || place == null) ListKind.PROJECT else ListKind.AREA, size = 18.dp) },
+                place ?: stringResource(R.string.place_none),
+                color = if (place == null) muted else Color.Unspecified,
+                onClick = onPlace,
+                clickLabel = stringResource(R.string.move),
+            )
         }
         val tags = library.tagTitles(task)
         if (tags.isNotEmpty() || onTags != null) {
             // Tapping the tags (or "Tags" when there are none) picks them.
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = if (onTags != null) Modifier.clickable(onClickLabel = stringResource(R.string.tags_edit)) { onTags() } else Modifier,
+            Row(
+                Modifier.fillMaxWidth()
+                    .then(if (onTags != null) Modifier.clickable(onClickLabel = stringResource(R.string.tags_edit)) { onTags() } else Modifier)
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                tags.forEach { TagPill(it) }
-                if (onTags != null && tags.isEmpty()) {
-                    Text("# " + stringResource(R.string.tags_edit), style = MaterialTheme.typography.labelLarge, color = muted)
+                Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { TagGlyph(muted, size = 18.dp) }
+                Spacer(Modifier.width(10.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    tags.forEach { TagPill(it) }
+                    if (tags.isEmpty()) Text(stringResource(R.string.tags_edit), style = MaterialTheme.typography.bodyMedium, color = muted)
                 }
             }
         }
@@ -2071,8 +2150,19 @@ private fun DetailFacts(library: ThingsLibrary, task: Task, onTags: (() -> Unit)
 }
 
 @Composable
-private fun Fact(icon: @Composable () -> Unit, text: String, color: Color = Color.Unspecified) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+private fun Fact(
+    icon: @Composable () -> Unit,
+    text: String,
+    color: Color = Color.Unspecified,
+    onClick: (() -> Unit)? = null,
+    clickLabel: String? = null,
+) {
+    Row(
+        Modifier.fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = clickLabel, onClick = onClick) else Modifier)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { icon() }
         Spacer(Modifier.width(10.dp))
         Text(text, style = MaterialTheme.typography.bodyMedium, color = color)

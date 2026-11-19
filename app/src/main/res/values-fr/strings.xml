@@ -209,6 +209,7 @@
     <string name="emoji_title">Emoji</string>
     <string name="emoji_none">Sans emoji</string>
     <string name="tags_edit">Tags</string>
+    <string name="place_none">Aucun projet ni zone</string>
     <string name="tags_none">Aucun tag dans Things pour l’instant. Crée-les dans Things.</string>
     <plurals name="selection_trashed">
         <item quantity="one">%d élément mis à la corbeille</item>

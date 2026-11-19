@@ -207,6 +207,7 @@
     <string name="emoji_title">Emoji</string>
     <string name="emoji_none">No emoji</string>
     <string name="tags_edit">Tags</string>
+    <string name="place_none">No project or area</string>
     <string name="tags_none">No tags in Things yet. Create them in Things.</string>
     <plurals name="selection_trashed">
         <item quantity="one">%d item moved to Trash</item>
