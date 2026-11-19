@@ -94,4 +94,18 @@ class DeadlineListsTest {
 
         assertEquals(listOf("late", "today", "proj"), lib.deadlines().map { it.id })
     }
+
+    @Test
+    fun `list counts are the open to-dos of the Inbox and Today, and the overdue ones`() {
+        val lib = library(
+            "in1" to task(""""tt": "In 1", "st": 0"""),
+            "in2" to task(""""tt": "In 2", "st": 0"""),
+            "inDone" to task(""""tt": "In done", "st": 0, "ss": 3, "sp": ${day15 + 3600}"""),
+            "t1" to task(""""tt": "T 1", "st": 1, "sr": $day15"""),
+            "late" to task(""""tt": "Late", "st": 1, "dd": $day14"""),
+            "proj" to task(""""tt": "Project", "tp": 1, "st": 1, "sr": $day15, "dd": $day14"""),
+        )
+
+        assertEquals(ListCounts(inbox = 2, today = 2, overdue = 2), lib.counts(today))
+    }
 }

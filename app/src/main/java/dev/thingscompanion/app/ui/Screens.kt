@@ -88,6 +88,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import dev.thingscompanion.cloud.ListCounts
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.DrawerValue
@@ -681,6 +684,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
 
     // Areas folded closed, shared by the Projects list and the side menu.
     var foldedAreas by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    // The numbers Things shows next to its lists.
+    val counts = remember(library) { library?.counts(ThingsDay.today()) }
     val drawer = state.navLayout == NavLayout.DRAWER
     val bottom = state.navLayout == NavLayout.BOTTOM
     var moreOpen by remember { mutableStateOf(false) }
@@ -707,7 +712,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                         NavigationBarItem(
                             selected = atList && list == tab,
                             onClick = { openList(list) },
-                            icon = { ListIcon(list.kind, size = 22.dp) },
+                            icon = { CountedListIcon(list, counts, size = 22.dp) },
                             label = { Text(stringResource(list.label), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         )
                     }
@@ -974,7 +979,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                                 Tab(
                                     selected = tab == entry,
                                     onClick = { tab = entry },
-                                    icon = { ListIcon(entry.kind, size = 20.dp) },
+                                    icon = { CountedListIcon(entry, counts, size = 20.dp) },
                                     text = { Text(stringResource(entry.label), maxLines = 1) },
                                 )
                             }
@@ -1074,6 +1079,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 ModalDrawerSheet {
                     SideMenu(
                         library = library,
+                        counts = counts,
                         lists = if (tab in shownTabs) shownTabs else shownTabs + tab,
                         current = tab.takeIf { projectId == null && areaId == null },
                         currentPlace = projectId ?: areaId,
@@ -2752,6 +2758,7 @@ private fun foldForSearch(text: String): String =
 @Composable
 private fun SideMenu(
     library: ThingsLibrary?,
+    counts: ListCounts?,
     lists: List<ListTab>,
     current: ListTab?,
     currentPlace: String?,
@@ -2772,6 +2779,11 @@ private fun SideMenu(
             NavigationDrawerItem(
                 label = { Text(stringResource(list.label)) },
                 icon = { ListIcon(list.kind, size = 22.dp) },
+                badge = {
+                    listCount(list, counts)?.let { (count, late) ->
+                        Text(count.toString(), color = if (late) ListColors.deadline else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+                    }
+                },
                 selected = list == current,
                 onClick = { onOpen(list) },
                 modifier = Modifier.padding(horizontal = 12.dp),
@@ -2810,4 +2822,32 @@ private fun SideMenu(
             if (!isFolded) library.areaProjects(area.id).forEach { ProjectItem(it) }
         }
     }
+}
+
+/** The number shown next to a list, as Things does (Inbox, Today, overdue deadlines in red), or null when none. */
+private fun listCount(list: ListTab, counts: ListCounts?): Pair<Int, Boolean>? {
+    counts ?: return null
+    val (count, late) = when (list) {
+        ListTab.INBOX -> counts.inbox to false
+        ListTab.TODAY -> counts.today to false
+        ListTab.DEADLINES -> counts.overdue to true
+        else -> return null
+    }
+    return (count to late).takeIf { count > 0 }
+}
+
+/** A list's icon with its count as a small badge, for the tabs and the bottom bar. */
+@Composable
+private fun CountedListIcon(list: ListTab, counts: ListCounts?, size: androidx.compose.ui.unit.Dp) {
+    val count = listCount(list, counts)
+    BadgedBox(
+        badge = {
+            if (count != null) {
+                Badge(
+                    containerColor = if (count.second) ListColors.deadline else MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = if (count.second) Color.White else MaterialTheme.colorScheme.onSecondaryContainer,
+                ) { Text(if (count.first > 99) "99+" else count.first.toString()) }
+            }
+        },
+    ) { ListIcon(list.kind, size = size) }
 }

@@ -60,6 +60,9 @@ data class Task(
     val upcomingDay: LocalDate? get() = startDate ?: deadline
 }
 
+/** The numbers Things shows next to its lists: open to-dos in the Inbox and Today, and overdue items. */
+data class ListCounts(val inbox: Int, val today: Int, val overdue: Int)
+
 /** A heading of a project and its to-dos; [heading] is null for the to-dos under no heading. */
 data class ProjectSection(val heading: Task?, val tasks: List<Task>)
 
@@ -178,6 +181,13 @@ class ThingsLibrary private constructor(
                 (it.startDate == null && it.start != StartList.INBOX && it.deadline?.isAfter(today) == true)
             )
     }.sortedWith(compareBy<Task>({ it.upcomingDay }, { it.index }, { it.id }))
+
+    /** What Things counts next to its lists (open items only). */
+    fun counts(today: LocalDate): ListCounts = ListCounts(
+        inbox = inbox().size,
+        today = today(today).size,
+        overdue = deadlines().count { it.deadline!!.isBefore(today) },
+    )
 
     /** Things' Deadlines list: open to-dos and projects that have a deadline, earliest first. */
     fun deadlines(closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) {

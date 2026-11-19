@@ -2,6 +2,12 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.9] - 2026-11-19
+
+### Added
+
+- **Counts next to the lists, as in Things**: how many to-dos are in the Inbox and in Today, and how many items are past their deadline (in red, on Deadlines). They show on the tabs, in the side menu and in the bottom bar.
+
 ## [0.4.8] - 2026-11-19
 
 ### Added
