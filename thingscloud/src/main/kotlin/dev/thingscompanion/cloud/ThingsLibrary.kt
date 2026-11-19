@@ -179,6 +179,11 @@ class ThingsLibrary private constructor(
             )
     }.sortedWith(compareBy<Task>({ it.upcomingDay }, { it.index }, { it.id }))
 
+    /** Things' Deadlines list: open to-dos and projects that have a deadline, earliest first. */
+    fun deadlines(closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) {
+        it.type != TaskType.HEADING && !it.isRecurrenceTemplate && it.deadline != null
+    }.sortedWith(compareBy<Task>({ it.deadline }, { it.index }, { it.id }))
+
     fun anytime(today: LocalDate, closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) {
         it.isTodo && it.start == StartList.ANYTIME &&
             (it.startDate == null || !it.startDate.isAfter(today)) &&

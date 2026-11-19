@@ -238,6 +238,7 @@ private val LIST_LABEL_RES = mapOf(
     "today" to R.string.list_today,
     "inbox" to R.string.list_inbox,
     "upcoming" to R.string.list_upcoming,
+    "deadlines" to R.string.list_deadlines,
     "anytime" to R.string.list_anytime,
     "someday" to R.string.list_someday,
 )

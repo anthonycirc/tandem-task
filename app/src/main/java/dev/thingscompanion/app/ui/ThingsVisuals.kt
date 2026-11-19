@@ -53,13 +53,14 @@ object ListColors {
     val area = Color(0xFF3FA99A)
 }
 
-enum class ListKind { INBOX, TODAY, UPCOMING, ANYTIME, SOMEDAY, PROJECT, AREA, TRASH, EVENING }
+enum class ListKind { INBOX, TODAY, UPCOMING, DEADLINES, ANYTIME, SOMEDAY, PROJECT, AREA, TRASH, EVENING }
 
 /** The icon of a list, drawn in its colour; a project's circle fills with its [progress], 0 to 1. */
 @Composable
 fun ListIcon(kind: ListKind, modifier: Modifier = Modifier, size: Dp = 22.dp, progress: Float = 0f) {
     when (kind) {
         ListKind.TODAY -> Icon(Icons.Filled.Star, null, modifier.size(size), tint = ListColors.today)
+        ListKind.DEADLINES -> DeadlineFlag(modifier, size = size)
         ListKind.UPCOMING -> Icon(Icons.Filled.DateRange, null, modifier.size(size), tint = ListColors.upcoming)
         ListKind.TRASH -> Icon(Icons.Filled.Delete, null, modifier.size(size), tint = ListColors.trash)
         else -> Canvas(modifier.size(size)) {

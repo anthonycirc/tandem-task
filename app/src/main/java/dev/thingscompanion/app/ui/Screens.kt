@@ -32,6 +32,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import dev.thingscompanion.cloud.ListLayout
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.border
@@ -84,7 +86,9 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -158,6 +162,8 @@ enum class ListTab(@StringRes val label: Int, val kind: ListKind) {
     TODAY(R.string.list_today, ListKind.TODAY),
     INBOX(R.string.list_inbox, ListKind.INBOX),
     UPCOMING(R.string.list_upcoming, ListKind.UPCOMING),
+    // Things' Deadlines list: everything with a deadline, overdue first.
+    DEADLINES(R.string.list_deadlines, ListKind.DEADLINES),
     ANYTIME(R.string.list_anytime, ListKind.ANYTIME),
     SOMEDAY(R.string.list_someday, ListKind.SOMEDAY),
     // Projects and areas in one list: each area folds open or closed over its projects.
@@ -244,7 +250,10 @@ private fun LoginScreen(loading: Boolean, snackbar: SnackbarHostState, onSignIn:
 private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: SnackbarHostState) {
     val library = state.library
     val filter = state.filter
-    var tab by rememberSaveable { mutableStateOf(ListTab.TODAY) }
+    // The tabs in the order chosen in Settings, without the hidden ones (still reachable from the search).
+    val allTabs = ListTab.entries.map { it.name }
+    val shownTabs = ListLayout.shown(allTabs, state.tabOrder, state.hiddenTabs).map(ListTab::valueOf)
+    var tab by rememberSaveable { mutableStateOf(shownTabs.first()) }
     var adding by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var filtering by remember { mutableStateOf(false) }
@@ -537,6 +546,13 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 searching = false
                 areaId = it.id
             },
+            onOpenList = {
+                searching = false
+                taskId = null
+                projectId = null
+                areaId = null
+                tab = it
+            },
             onDismiss = { searching = false },
         )
         // A swipe to the left on a result reschedules it, as in the lists.
@@ -557,6 +573,9 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
         SettingsDialog(
             themeMode = state.themeMode,
             onThemeModeChange = viewModel::setThemeMode,
+            tabOrder = ListLayout.order(ListTab.entries.map { it.name }, state.tabOrder),
+            hiddenTabs = state.hiddenTabs,
+            onTabsChange = viewModel::setTabs,
             pending = state.pending,
             onDiscardPending = viewModel::discardPending,
             demo = state.demo,
@@ -744,12 +763,12 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
             }
             TopAppBar(
                 title = {
-                    if (taskId == null && projectId == null && areaId == null) {
+                    if (projectId == null && areaId == null) {
                         Text(stringResource(R.string.app_name), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 },
                 navigationIcon = {
-                    if (taskId != null || projectId != null || areaId != null) {
+                    if (projectId != null || areaId != null) {
                         IconButton(onClick = ::back) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                         }
@@ -761,32 +780,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             Text(stringResource(R.string.pending_count, state.pending), style = MaterialTheme.typography.labelMedium)
                         }
                     }
-                    if (openTask != null && library != null) {
-                        if (openTask.type == TaskType.TODO && !openTask.trashed) {
-                            IconButton(onClick = { editingId = openTask.id }) {
-                                Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.edit))
-                            }
-                        }
-                        if (library.canMakeRepeating(openTask)) {
-                            val repeatLabel = stringResource(R.string.repeat_title)
-                            IconButton(onClick = { repeatingId = openTask.id }, modifier = Modifier.semantics { contentDescription = repeatLabel }) {
-                                RepeatGlyph(LocalContentColor.current, size = 22.dp)
-                            }
-                        }
-                        if (library.canMove(openTask)) {
-                            IconButton(onClick = { movingId = openTask.id }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.move))
-                            }
-                        }
-                        if (library.canTrash(openTask)) {
-                            IconButton(onClick = {
-                                taskId = null
-                                viewModel.trash(openTask.id)
-                            }) {
-                                Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.move_to_trash))
-                            }
-                        }
-                    } else {
+                    run {
                         if (tab != ListTab.TRASH || projectId != null || areaId != null) {
                             val selectLabel = stringResource(R.string.select)
                             IconButton(onClick = { selection = emptyList() }, modifier = Modifier.semantics { contentDescription = selectLabel }) {
@@ -822,20 +816,6 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
             if (state.syncing) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp)) else Spacer(Modifier.height(2.dp))
             when {
                 library == null -> Text(stringResource(R.string.loading_lists), Modifier.padding(16.dp))
-                openTask != null -> TaskDetail(
-                    library = library,
-                    task = openTask,
-                    onSetDone = viewModel::setDone,
-                    onChecklistDone = viewModel::setChecklistItemDone,
-                    onAddChecklistItem = viewModel::addChecklistItem,
-                    onDeleteChecklistItem = viewModel::deleteChecklistItem,
-                    onRestore = viewModel::restore,
-                    onDeleteForever = { deletingForever = listOf(it) },
-                    onTags = { taggingId = it },
-                    onReschedule = { schedulingId = it },
-                    onMove = { movingId = it },
-                    onSetCancelled = viewModel::setCancelled,
-                )
                 openProject != null -> {
                     if (!filter.isEmpty) ActiveFilters(library, filter, viewModel::setFilter)
                     TaskList(
@@ -913,8 +893,10 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                     query = ""
                     searching = true
                 })) {
-                    PrimaryScrollableTabRow(selectedTabIndex = tab.ordinal, edgePadding = 8.dp) {
-                        ListTab.entries.forEach { entry ->
+                    // A hidden list opened from the search shows as a tab while it is open.
+                    val tabs = if (tab in shownTabs) shownTabs else shownTabs + tab
+                    PrimaryScrollableTabRow(selectedTabIndex = tabs.indexOf(tab), edgePadding = 8.dp) {
+                        tabs.forEach { entry ->
                             Tab(
                                 selected = tab == entry,
                                 onClick = { tab = entry },
@@ -959,6 +941,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                                 ListTab.TODAY -> library.today(today, closedOn = today)
                                 ListTab.INBOX -> library.inbox(closedOn = today)
                                 ListTab.UPCOMING -> library.upcoming(today, closedOn = today)
+                                ListTab.DEADLINES -> library.deadlines(closedOn = today)
                                 ListTab.ANYTIME -> library.anytime(today, closedOn = today)
                                 else -> library.someday(closedOn = today)
                             }
@@ -971,6 +954,11 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                                 // Undated items due later are filed under their deadline day, as in Things.
                                 ListTab.UPCOMING -> tasks.groupBy { it.upcomingDay }.map { (date, items) ->
                                     (date?.let(Group::Day) ?: Group.None) to items
+                                }
+                                // Overdue first, then each deadline day, as in Things.
+                                ListTab.DEADLINES -> {
+                                    val (overdue, coming) = tasks.partition { it.deadline!!.isBefore(today) }
+                                    listOf(Group.Overdue to overdue) + coming.groupBy { it.deadline!! }.map { (day, items) -> Group.Day(day) to items }
                                 }
                                 else -> listOf(Group.None to tasks)
                             }
@@ -988,7 +976,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                                     } else {
                                         viewModel.reorder(task.id, order, tab.name)
                                     }
-                                }.takeIf { filter.isEmpty && tab != ListTab.UPCOMING },
+                                }.takeIf { filter.isEmpty && tab != ListTab.UPCOMING && tab != ListTab.DEADLINES },
                                 // In Today only for its deadline: no Today order to change.
                                 canDrag = { tab != ListTab.TODAY || it.startDate != null },
                             )
@@ -996,6 +984,54 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                     }
                 }
             }
+        }
+    }
+
+    // A to-do opens in a sheet sliding up over the list, as in Todoist; swiping it down or Back closes it.
+    if (openTask != null && library != null) {
+        val sheetState = rememberModalBottomSheetState()
+        ModalBottomSheet(onDismissRequest = { taskId = null }, sheetState = sheetState) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                if (openTask.type == TaskType.TODO && !openTask.trashed) {
+                    IconButton(onClick = { editingId = openTask.id }) {
+                        Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.edit))
+                    }
+                }
+                if (library.canMakeRepeating(openTask)) {
+                    val repeatLabel = stringResource(R.string.repeat_title)
+                    IconButton(onClick = { repeatingId = openTask.id }, modifier = Modifier.semantics { contentDescription = repeatLabel }) {
+                        RepeatGlyph(LocalContentColor.current, size = 22.dp)
+                    }
+                }
+                if (library.canMove(openTask)) {
+                    IconButton(onClick = { movingId = openTask.id }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.move))
+                    }
+                }
+                if (library.canTrash(openTask)) {
+                    IconButton(onClick = {
+                        taskId = null
+                        viewModel.trash(openTask.id)
+                    }) {
+                        Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.move_to_trash))
+                    }
+                }
+            }
+            TaskDetail(
+                library = library,
+                task = openTask,
+                onSetDone = viewModel::setDone,
+                onChecklistDone = viewModel::setChecklistItemDone,
+                onAddChecklistItem = viewModel::addChecklistItem,
+                onDeleteChecklistItem = viewModel::deleteChecklistItem,
+                onRestore = viewModel::restore,
+                onDeleteForever = { deletingForever = listOf(it) },
+                onTags = { taggingId = it },
+                onReschedule = { schedulingId = it },
+                onMove = { movingId = it },
+                onSetCancelled = viewModel::setCancelled,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+            )
         }
     }
 }
@@ -1043,12 +1079,19 @@ private fun SearchScreen(
     onQuery: (String) -> Unit,
     actions: RowActions,
     onOpenArea: (Area) -> Unit,
+    onOpenList: (ListTab) -> Unit,
     onDismiss: () -> Unit,
 ) {
     BackHandler(onBack = onDismiss)
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     val result = remember(library, query) { library.search(query) }
+    // Lists by name, hidden ones included: the way to open a list taken out of the tabs.
+    val listNames = ListTab.entries.associateWith { stringResource(it.label) }
+    val lists = remember(query, listNames) {
+        val wanted = foldForSearch(query.trim())
+        if (wanted.isEmpty()) emptyList() else ListTab.entries.filter { foldForSearch(listNames.getValue(it)).contains(wanted) }
+    }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
@@ -1080,7 +1123,17 @@ private fun SearchScreen(
         },
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding).imePadding()) {
-            if (query.isNotBlank() && result.tasks.isEmpty() && result.areas.isEmpty()) {
+            items(lists, key = { "list-" + it.name }) { list ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onOpenList(list) }.padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ListIcon(list.kind, size = 20.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(listNames.getValue(list), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            if (query.isNotBlank() && lists.isEmpty() && result.tasks.isEmpty() && result.areas.isEmpty()) {
                 item(key = "none") {
                     Text(stringResource(R.string.search_none), Modifier.padding(20.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -1383,6 +1436,8 @@ private sealed interface Group {
     data class Heading(val id: String, val title: String) : Group
     data object Evening : Group
     data class Day(val date: LocalDate) : Group
+    /** The Deadlines list's first section: what is past its deadline. */
+    data object Overdue : Group
 }
 
 /** The list's icon and name in large type, as Things opens each list. */
@@ -1409,6 +1464,10 @@ private fun GroupHeader(group: Group, onHeading: (Group.Heading) -> Unit = {}) {
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.this_evening), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ListColors.evening)
             }
+            HorizontalDivider(Modifier.padding(top = 6.dp))
+        }
+        Group.Overdue -> Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 4.dp)) {
+            Text(stringResource(R.string.overdue), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ListColors.deadline)
             HorizontalDivider(Modifier.padding(top = 6.dp))
         }
         is Group.Day -> Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 4.dp)) {
@@ -2042,11 +2101,12 @@ private fun TaskDetail(
     onReschedule: (String) -> Unit = {},
     onMove: (String) -> Unit = {},
     onSetCancelled: (String, Boolean) -> Unit = { _, _ -> },
+    modifier: Modifier = Modifier.fillMaxSize(),
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val focusManager = LocalFocusManager.current
     Column(
-        Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier.imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (task.trashed) {
@@ -2390,6 +2450,9 @@ private fun ActiveFilters(library: ThingsLibrary, filter: TaskFilter, onChange: 
 private fun SettingsDialog(
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
+    tabOrder: List<String>,
+    hiddenTabs: Set<String>,
+    onTabsChange: (List<String>, Set<String>) -> Unit,
     pending: Int,
     onDiscardPending: () -> Unit,
     demo: Boolean,
@@ -2416,7 +2479,7 @@ private fun SettingsDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.settings)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(R.string.app_theme), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ThemeMode.entries.forEach { mode ->
@@ -2435,6 +2498,34 @@ private fun SettingsDialog(
                                 )
                             },
                         )
+                    }
+                }
+                HorizontalDivider()
+                // The tabs: their order (arrows) and which ones show (switch); a hidden list stays in the search.
+                Text(stringResource(R.string.lists_title), style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(R.string.lists_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column {
+                    tabOrder.forEachIndexed { index, name ->
+                        val entry = ListTab.valueOf(name)
+                        val shown = name !in hiddenTabs
+                        val lastShown = shown && tabOrder.count { it !in hiddenTabs } == 1
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ListIcon(entry.kind, size = 18.dp)
+                            Spacer(Modifier.width(10.dp))
+                            Text(stringResource(entry.label), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            IconButton(onClick = { onTabsChange(ListLayout.move(tabOrder, name, -1), hiddenTabs) }, enabled = index > 0) {
+                                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.move_up))
+                            }
+                            IconButton(onClick = { onTabsChange(ListLayout.move(tabOrder, name, 1), hiddenTabs) }, enabled = index < tabOrder.lastIndex) {
+                                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.move_down))
+                            }
+                            // The last list shown can't be hidden: the screen needs one.
+                            Switch(
+                                checked = shown,
+                                enabled = !lastShown,
+                                onCheckedChange = { on -> onTabsChange(tabOrder, if (on) hiddenTabs - name else hiddenTabs + name) },
+                            )
+                        }
                     }
                 }
                 if (pending > 0) {
@@ -2513,3 +2604,7 @@ private fun SelectionMark(picked: Boolean, modifier: Modifier = Modifier) {
         }
     }
 }
+
+/** Text compared for search: lower case, without accents. */
+private fun foldForSearch(text: String): String =
+    java.text.Normalizer.normalize(text.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "")

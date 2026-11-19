@@ -262,4 +262,10 @@
     <string name="state_checked">Cochée</string>
     <string name="state_unchecked">Non cochée</string>
     <string name="state_cancelled">Annulée</string>
+    <string name="list_deadlines">Échéances</string>
+    <string name="overdue">En retard</string>
+    <string name="lists_title">Listes</string>
+    <string name="lists_hint">Ordre des onglets et ceux qui s’affichent. Une liste masquée se retrouve par son nom dans la recherche.</string>
+    <string name="move_up">Monter</string>
+    <string name="move_down">Descendre</string>
 </resources>

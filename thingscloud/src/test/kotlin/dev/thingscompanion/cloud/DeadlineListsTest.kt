@@ -79,4 +79,19 @@ class DeadlineListsTest {
         val moved = PendingChange.Reorder("op", "b", listOf("due", "b", "a"), "today:false", todayOrder = true, evening = false).build(lib, 1_794_750_000.0).orEmpty()
         kotlin.test.assertFalse("due" in moved)
     }
+
+    @Test
+    fun `the Deadlines list holds every open to-do and project with a deadline, earliest first`() {
+        val lib = library(
+            "late" to task(""""tt": "Late", "st": 1, "sr": $day16, "dd": $day14"""),
+            "proj" to task(""""tt": "Project", "tp": 1, "st": 1, "dd": $day17"""),
+            "today" to task(""""tt": "Today", "st": 0, "dd": $day15"""),
+            "plain" to task(""""tt": "No deadline", "st": 1, "sr": $day15"""),
+            "done" to task(""""tt": "Done", "st": 1, "dd": $day15, "ss": 3, "sp": ${day15 + 3600}"""),
+            "head" to task(""""tt": "Heading", "tp": 2, "st": 1, "dd": $day15"""),
+            "tmpl" to task(""""tt": "Template", "st": 1, "dd": $day15, "rr": {"tp": 0}"""),
+        )
+
+        assertEquals(listOf("late", "today", "proj"), lib.deadlines().map { it.id })
+    }
 }

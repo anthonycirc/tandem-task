@@ -6,7 +6,7 @@ import java.time.LocalDate
 
 /**
  * A small copy of every list, written after each sync, so a home-screen widget can show
- * any of them without loading the whole history. Keys: `today`, `inbox`, `upcoming`,
+ * any of them without loading the whole history. Keys: `today`, `inbox`, `upcoming`, `deadlines`,
  * `anytime`, `someday`, and `project:<id>`.
  */
 @Serializable
@@ -46,6 +46,7 @@ data class WidgetSnapshot(
             "today" to "Today",
             "inbox" to "Inbox",
             "upcoming" to "Upcoming",
+            "deadlines" to "Deadlines",
             "anytime" to "Anytime",
             "someday" to "Someday",
         )
@@ -60,6 +61,7 @@ data class WidgetSnapshot(
                 "today" to library.today(today).items(),
                 "inbox" to library.inbox().items(),
                 "upcoming" to library.upcoming(today).items(),
+                "deadlines" to library.deadlines().items(),
                 "anytime" to library.anytime(today).items(),
                 "someday" to library.someday().items(),
             ) + projects.associate { "$PROJECT_PREFIX${it.id}" to library.projectTasks(it.id).items() }

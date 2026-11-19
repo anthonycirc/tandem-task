@@ -106,6 +106,8 @@ class WidgetSnapshotTest {
 
         assertEquals(LocalDate.of(2026, 11, 16).toEpochDay(), items.getValue("due").deadlineDay)
         assertEquals(34_200, items.getValue("due").reminderSeconds)
+        // The Deadlines list is offered to the widget too.
+        assertEquals(listOf("due"), WidgetSnapshot.from(lib, today, updatedAtMillis = 42).items("deadlines").map { it.id })
         assertEquals(null, items.getValue("plain").deadlineDay)
         assertEquals(null, items.getValue("plain").reminderSeconds)
     }

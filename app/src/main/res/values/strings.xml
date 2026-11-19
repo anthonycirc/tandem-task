@@ -258,4 +258,10 @@
     <string name="state_checked">Checked</string>
     <string name="state_unchecked">Not checked</string>
     <string name="state_cancelled">Cancelled</string>
+    <string name="list_deadlines">Deadlines</string>
+    <string name="overdue">Overdue</string>
+    <string name="lists_title">Lists</string>
+    <string name="lists_hint">Order of the tabs, and which ones show. A hidden list is still found by its name in the search.</string>
+    <string name="move_up">Move up</string>
+    <string name="move_down">Move down</string>
 </resources>

@@ -65,6 +65,9 @@ data class UiState(
     /** Display filter; the show-completed choice is remembered across launches. */
     val filter: TaskFilter = TaskFilter(),
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    /** The list tabs as arranged in Settings (names of [ListTab]); remembered across launches. */
+    val tabOrder: List<String> = emptyList(),
+    val hiddenTabs: Set<String> = emptySet(),
     /** Sample data for screenshots: no network, no writes, the real cache untouched. */
     val demo: Boolean = false,
 )
@@ -84,6 +87,8 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
             filter = TaskFilter(showClosed = displayPrefs.getBoolean(KEY_SHOW_CLOSED, true)),
             themeMode = displayPrefs.getString(KEY_THEME, null)
                 ?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
+            tabOrder = displayPrefs.getString(KEY_TAB_ORDER, null)?.split(',')?.filter { it.isNotBlank() }.orEmpty(),
+            hiddenTabs = displayPrefs.getStringSet(KEY_HIDDEN_TABS, null).orEmpty().toSet(),
         ),
     )
     val state: StateFlow<UiState> = _state
@@ -515,6 +520,12 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         _state.update { it.copy(themeMode = mode) }
     }
 
+    /** The tabs' new order and the hidden ones, from Settings. */
+    fun setTabs(order: List<String>, hidden: Set<String>) {
+        displayPrefs.edit().putString(KEY_TAB_ORDER, order.joinToString(",")).putStringSet(KEY_HIDDEN_TABS, hidden).apply()
+        _state.update { it.copy(tabOrder = order, hiddenTabs = hidden) }
+    }
+
     fun setFilter(filter: TaskFilter) {
         displayPrefs.edit().putBoolean(KEY_SHOW_CLOSED, filter.showClosed).apply()
         _state.update { it.copy(filter = filter) }
@@ -545,6 +556,8 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
 
         const val KEY_SHOW_CLOSED = "show_closed"
         const val KEY_THEME = "theme"
+        const val KEY_TAB_ORDER = "tab_order"
+        const val KEY_HIDDEN_TABS = "hidden_tabs"
     }
 
     private fun messageText(e: Exception): String {

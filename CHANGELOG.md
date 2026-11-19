@@ -2,6 +2,17 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.5] - 2026-11-19
+
+### Added
+
+- **A Deadlines list, as in Things 3.24.** A new tab lists every open to-do and project with a deadline, overdue ones first under "Overdue", then by deadline day. The widget can show it too.
+- **Arrange the tabs.** In Settings, under Lists, move each list up or down and switch off the ones you don't use. A hidden list is still found by its name in the search, and opens as a tab while you use it.
+
+### Changed
+
+- **A to-do opens in a sheet.** Tapping a to-do slides its details up from the bottom over the list, as in Todoist, instead of opening a new page; swipe it down or press Back to close it. Edit, repeat, move and Trash are at the top of the sheet.
+
 ## [0.4.4] - 2026-11-19
 
 ### Changed
