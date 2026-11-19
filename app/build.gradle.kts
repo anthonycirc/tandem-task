@@ -12,13 +12,16 @@ android {
         applicationId = "dev.thingscompanion.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 25
-        versionName = "0.5.0"
+        versionCode = 26
+        versionName = "0.5.1"
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Published builds are release builds, so not debuggable: no adb run-as into the app's data.
+            // They keep the key every earlier APK was signed with, so an update still installs over them.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

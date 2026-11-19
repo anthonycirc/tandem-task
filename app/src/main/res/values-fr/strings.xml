@@ -273,4 +273,9 @@
     <string name="navigation_drawer">Menu latéral</string>
     <string name="open_menu">Ouvrir le menu</string>
     <string name="navigation_bottom">Barre en bas</string>
+    <string name="widget_color_custom">Personnalisée</string>
+    <string name="widget_red">Rouge %1$d</string>
+    <string name="widget_green">Vert %1$d</string>
+    <string name="widget_blue">Bleu %1$d</string>
+    <string name="widget_hex">Couleur hexadécimale</string>
 </resources>

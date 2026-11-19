@@ -30,7 +30,7 @@ Things has no Android app. Tandem Task brings your lists, notes and reminders to
 - **Checklists**: check items from the to-do, add, rename or delete them.
 - **Trash**: move to-dos to the Trash, restore them, or delete them for good (one at a time or Empty Trash), after a confirmation.
 - **Reminders on Android**: reminders set on any device ring on your phone as notifications, on time.
-- **Home-screen widget**: any list or project. Tap a circle to check a to-do off (it stays ticked for 3 seconds, so a second tap takes a mistake back), or **+** to add one. Reminders and deadlines stand out under each title. The ⋯ button changes the list, the theme (light, dark or system), the background color and its opacity.
+- **Home-screen widget**: any list or project. Tap a circle to check a to-do off (it stays ticked for 3 seconds, so a second tap takes a mistake back), or **+** to add one. Reminders and deadlines stand out under each title. The ⋯ button changes the list, the theme (light, dark or system), the background color (a preset, or any colour by red, green and blue or hex) and its opacity.
 - **Filters**: by tag, project or area, and date. Show or hide to-dos completed today.
 - **Background sync** every 30 minutes and when you come back to the app, so the widget stays current.
 - A design in the spirit of Things. Light, dark or system theme. English and French.

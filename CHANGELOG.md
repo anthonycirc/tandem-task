@@ -2,6 +2,18 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - 2026-11-19
+
+### Added
+
+- **Any colour for the widget.** Next to the preset colours, Custom picks the widget's background by its red, green and blue, or typed as hex (`#2F5BB7`), with a live preview. Over a light colour the text turns dark so it stays readable.
+
+### Security
+
+- **Releases are no longer debuggable.** Every APK published so far was a debug build: with the phone unlocked and USB debugging on, a computer could read the app's data (the Things cache, and possibly the history key that opens the account). From 0.5.1 the APK is a release build, signed with the same key, so it installs over the previous version as an update.
+- The app's data is left out of transfers to a new phone (Android 12+), as it already was of cloud backups.
+- The screenshot demo mode only starts on development builds, so another app can't switch Tandem Task into it.
+
 ## [0.5.0] - 2026-11-19
 
 Navigation, your way: tabs at the top, a side menu or a bar at the bottom (0.4.6 to 0.4.9), now shown as a choice of three sketches in Settings.

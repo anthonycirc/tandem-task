@@ -74,7 +74,8 @@ class ListWidget : GlanceAppWidget() {
                 val theme = prefs[THEME_KEY]?.let { runCatching { WidgetTheme.valueOf(it) }.getOrNull() } ?: WidgetTheme.SYSTEM
                 val color = prefs[COLOR_KEY]?.let { runCatching { WidgetColor.valueOf(it) }.getOrNull() } ?: WidgetColor.DEFAULT
                 val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
-                Content(context, snapshot, ticks, listKey, appWidgetId, WidgetColors(theme, prefs[OPACITY_KEY] ?: DEFAULT_OPACITY, color))
+                val customRgb = prefs[CUSTOM_RGB_KEY] ?: WidgetColors.DEFAULT_CUSTOM_RGB
+                Content(context, snapshot, ticks, listKey, appWidgetId, WidgetColors(theme, prefs[OPACITY_KEY] ?: DEFAULT_OPACITY, color, customRgb))
             }
         }
     }
@@ -174,6 +175,7 @@ class ListWidget : GlanceAppWidget() {
         val THEME_KEY = stringPreferencesKey("theme")
         val OPACITY_KEY = intPreferencesKey("opacity")
         val COLOR_KEY = stringPreferencesKey("color")
+        val CUSTOM_RGB_KEY = intPreferencesKey("custom_rgb")
         private val SNAPSHOT_VERSION = longPreferencesKey("snapshot_version")
         const val DEFAULT_LIST = "today"
         const val DEFAULT_OPACITY = 100
@@ -204,7 +206,14 @@ class ListWidget : GlanceAppWidget() {
             ListWidget().updateAll(context)
         }
 
-        data class Settings(val listKey: String, val theme: WidgetTheme, val opacity: Int, val color: WidgetColor = WidgetColor.DEFAULT)
+        data class Settings(
+            val listKey: String,
+            val theme: WidgetTheme,
+            val opacity: Int,
+            val color: WidgetColor = WidgetColor.DEFAULT,
+            /** The colour picked for [WidgetColor.CUSTOM], as 0xRRGGBB. */
+            val customRgb: Int = WidgetColors.DEFAULT_CUSTOM_RGB,
+        )
 
         suspend fun settings(context: Context, appWidgetId: Int): Settings {
             val glanceId = GlanceAppWidgetManager(context).getGlanceIdBy(appWidgetId)
@@ -214,6 +223,7 @@ class ListWidget : GlanceAppWidget() {
                 theme = prefs[THEME_KEY]?.let { runCatching { WidgetTheme.valueOf(it) }.getOrNull() } ?: WidgetTheme.SYSTEM,
                 opacity = prefs[OPACITY_KEY] ?: DEFAULT_OPACITY,
                 color = prefs[COLOR_KEY]?.let { runCatching { WidgetColor.valueOf(it) }.getOrNull() } ?: WidgetColor.DEFAULT,
+                customRgb = prefs[CUSTOM_RGB_KEY] ?: WidgetColors.DEFAULT_CUSTOM_RGB,
             )
         }
 
@@ -224,6 +234,7 @@ class ListWidget : GlanceAppWidget() {
                 it[THEME_KEY] = settings.theme.name
                 it[OPACITY_KEY] = settings.opacity.coerceIn(0, 100)
                 it[COLOR_KEY] = settings.color.name
+                it[CUSTOM_RGB_KEY] = settings.customRgb and 0xFFFFFF
             }
             ListWidget().update(context, glanceId)
         }

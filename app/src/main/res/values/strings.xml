@@ -269,4 +269,9 @@
     <string name="navigation_drawer">Side menu</string>
     <string name="open_menu">Open the menu</string>
     <string name="navigation_bottom">Bar at the bottom</string>
+    <string name="widget_color_custom">Custom</string>
+    <string name="widget_red">Red %1$d</string>
+    <string name="widget_green">Green %1$d</string>
+    <string name="widget_blue">Blue %1$d</string>
+    <string name="widget_hex">Hex colour</string>
 </resources>

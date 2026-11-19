@@ -2,6 +2,7 @@ package dev.thingscompanion.app
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -72,8 +73,10 @@ class MainActivity : ComponentActivity() {
     /** Widget taps: open the Inbox form, or a to-do's detail. */
     private fun handleLaunch(intent: Intent?) {
         intent ?: return
-        // Demo mode for screenshots, only reachable from adb: am start ... --ez demo true
-        if (intent.getBooleanExtra(EXTRA_DEMO, false)) viewModel.enterDemo()
+        // Demo mode for screenshots, from adb (am start ... --ez demo true) on a development build only:
+        // another app can't switch a published build into it.
+        val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        if (debuggable && intent.getBooleanExtra(EXTRA_DEMO, false)) viewModel.enterDemo()
         viewModel.handleLaunch(
             openAdd = intent.getBooleanExtra(EXTRA_OPEN_ADD, false),
             taskId = intent.getStringExtra(EXTRA_TASK_ID),
