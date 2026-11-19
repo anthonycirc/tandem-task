@@ -253,6 +253,8 @@
     <string name="reopen_todo">Reopen</string>
     <string name="checkbox_choices">More choices</string>
     <string name="tags_empty">No tags</string>
+    <string name="fold_area">Hide the area’s projects</string>
+    <string name="unfold_area">Show the area’s projects</string>
     <string name="state_checked">Checked</string>
     <string name="state_unchecked">Not checked</string>
     <string name="state_cancelled">Cancelled</string>

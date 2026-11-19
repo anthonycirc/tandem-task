@@ -2,6 +2,12 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.4] - 2026-11-19
+
+### Changed
+
+- **Projects and areas in one list.** The Areas tab is gone: in Projects, each area has an arrow that folds its projects away or shows them again, and a count of what it holds. Tapping an area still opens it (rename, delete, its own to-dos); swiping it right still asks before deleting it. A project dropped on a folded area goes first in it.
+
 ## [0.4.3] - 2026-11-19
 
 ### Added

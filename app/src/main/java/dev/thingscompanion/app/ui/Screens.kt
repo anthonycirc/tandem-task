@@ -31,6 +31,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
@@ -158,8 +160,8 @@ enum class ListTab(@StringRes val label: Int, val kind: ListKind) {
     UPCOMING(R.string.list_upcoming, ListKind.UPCOMING),
     ANYTIME(R.string.list_anytime, ListKind.ANYTIME),
     SOMEDAY(R.string.list_someday, ListKind.SOMEDAY),
+    // Projects and areas in one list: each area folds open or closed over its projects.
     PROJECTS(R.string.list_projects, ListKind.PROJECT),
-    AREAS(R.string.list_areas, ListKind.AREA),
     TRASH(R.string.list_trash, ListKind.TRASH),
 }
 
@@ -668,7 +670,6 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             add(R.string.new_todo_title to { startAdding() })
                             add(R.string.new_project_title to { newTagIds = emptyList(); addingProject = true })
                         }
-                        tab == ListTab.AREAS -> add(R.string.new_area_title to { naming = NameRequest(R.string.new_area_title) { viewModel.addArea(it) } })
                         tab == ListTab.PROJECTS -> {
                             add(R.string.new_project_title to { newTagIds = emptyList(); addingProject = true })
                             add(R.string.new_area_title to { naming = NameRequest(R.string.new_area_title) { viewModel.addArea(it) } })
@@ -786,7 +787,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             }
                         }
                     } else {
-                        if (tab != ListTab.TRASH && tab != ListTab.AREAS || projectId != null || areaId != null) {
+                        if (tab != ListTab.TRASH || projectId != null || areaId != null) {
                             val selectLabel = stringResource(R.string.select)
                             IconButton(onClick = { selection = emptyList() }, modifier = Modifier.semantics { contentDescription = selectLabel }) {
                                 SelectGlyph(LocalContentColor.current)
@@ -922,7 +923,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             )
                         }
                     }
-                    if (!filter.isEmpty && tab != ListTab.PROJECTS && tab != ListTab.AREAS && tab != ListTab.TRASH) ActiveFilters(library, filter, viewModel::setFilter)
+                    if (!filter.isEmpty && tab != ListTab.PROJECTS && tab != ListTab.TRASH) ActiveFilters(library, filter, viewModel::setFilter)
                     val title = stringResource(tab.label)
                     when (tab) {
                         ListTab.PROJECTS -> ProjectList(
@@ -934,7 +935,6 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             onDeleteArea = { deletingAreaId = it.id },
                             selected = selection?.toSet(),
                         ) { if (selection != null) toggleSelected(it.id) else projectId = it.id }
-                        ListTab.AREAS -> AreaList(library, title, onOpen = { areaId = it.id }, onDelete = { deletingAreaId = it.id })
                         ListTab.TRASH -> TaskList(
                             library = library,
                             header = {
@@ -1781,10 +1781,14 @@ private fun ProjectList(
 ) {
     val projects = library.projects()
     val areas = library.areas()
+    // Areas folded closed: their projects are hidden under the header.
+    var folded by rememberSaveable { mutableStateOf(emptyList<String>()) }
     // Area headers (the first, with no area, draws nothing) and projects, in display order.
-    val built = remember(library) {
+    val built = remember(library, folded) {
         listOf<Pair<String, Any?>>("area-none" to null) + projects.filter { it.areaId == null }.map { it.id to it } +
-            areas.flatMap { area -> listOf("area-${area.id}" to area) + library.areaProjects(area.id).map { it.id to it } }
+            areas.flatMap { area ->
+                listOf("area-${area.id}" to area) + if (area.id in folded) emptyList() else library.areaProjects(area.id).map { it.id to it }
+            }
     }
     val rows = remember(built) { built.toMutableStateList() }
     val listState = rememberLazyListState()
@@ -1799,8 +1803,10 @@ private fun ProjectList(
         if (index < 0) return
         val headerIndex = (index downTo 0).first { rows[it].second !is Task }
         val area = rows[headerIndex].second as? Area
-        val order = rows.drop(headerIndex + 1).takeWhile { it.second is Task }.map { it.first }
-        onDrop?.invoke(project, area?.id, order)
+        val shown = rows.drop(headerIndex + 1).takeWhile { it.second is Task }.map { it.first }
+        // Dropped on a folded area: first, before its hidden projects.
+        val hidden = area?.takeIf { it.id in folded }?.let { library.areaProjects(it.id).map(Task::id).filter { id -> id !in shown } }.orEmpty()
+        onDrop?.invoke(project, area?.id, shown + hidden)
     }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         item(key = "header") { ListHeader(ListKind.PROJECT, title) }
@@ -1820,20 +1826,42 @@ private fun ProjectList(
                             onReschedule = {},
                             onTrash = { onTrashProject(value) },
                         ) { ProjectRow(library, value, selected = selected?.let { value.id in it }, onOpen = onOpen) }
-                        // Every area, even one without projects, opens on its own to-dos and projects as in Things.
-                        // Swiped right, an area asks before it is deleted.
+                        // Every area, even one without projects, opens on its own to-dos and projects as in Things;
+                        // its arrow folds its projects away or back. Swiped right, an area asks before it is deleted.
                         is Area -> SwipeActions(canReschedule = false, canTrash = true, onReschedule = {}, onTrash = { onDeleteArea(value) }) {
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.surface)
-                                    .clickable { onOpenArea(value.id) }
-                                    .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                ListIcon(ListKind.AREA, size = 20.dp)
-                                Spacer(Modifier.width(12.dp))
-                                Text(value.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            val isFolded = value.id in folded
+                            Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onOpenArea(value.id) }
+                                        .padding(start = 20.dp, top = 12.dp, bottom = 0.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    ListIcon(ListKind.AREA, size = 20.dp)
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        value.title,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    // How much the area holds, shown when folded, as Todoist counts a section.
+                                    val count = library.areaProjects(value.id).size + library.areaTasks(value.id).size
+                                    if (count > 0) {
+                                        Text(count.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    IconButton(onClick = { folded = if (isFolded) folded - value.id else folded + value.id }) {
+                                        Icon(
+                                            if (isFolded) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
+                                            contentDescription = stringResource(if (isFolded) R.string.unfold_area else R.string.fold_area),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                                HorizontalDivider(Modifier.padding(start = 20.dp, end = 20.dp))
                             }
                         }
                         else -> Spacer(Modifier.height(1.dp))
@@ -1980,37 +2008,6 @@ private fun ProjectHeader(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) { tags.forEach { TagPill(it) } }
         }
-    }
-}
-
-/** Every area, as in Things' sidebar: tap to open, swipe right to delete (after a confirmation). */
-@Composable
-private fun AreaList(library: ThingsLibrary, title: String, onOpen: (Area) -> Unit, onDelete: (Area) -> Unit) {
-    val areas = library.areas()
-    LazyColumn(Modifier.fillMaxSize()) {
-        item(key = "header") { ListHeader(ListKind.AREA, title) }
-        if (areas.isEmpty()) {
-            item(key = "empty") { Text(stringResource(R.string.nothing_here), Modifier.padding(20.dp)) }
-        }
-        items(areas, key = { it.id }) { area ->
-            SwipeActions(canReschedule = false, canTrash = true, onReschedule = {}, onTrash = { onDelete(area) }) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .clickable { onOpen(area) }
-                        .padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    ListIcon(ListKind.AREA, size = 20.dp)
-                    Spacer(Modifier.width(12.dp))
-                    Text(area.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    val count = library.areaProjects(area.id).size + library.areaTasks(area.id).size
-                    if (count > 0) Text(count.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-        item(key = "footer") { Spacer(Modifier.height(88.dp)) }
     }
 }
 

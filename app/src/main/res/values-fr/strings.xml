@@ -257,6 +257,8 @@
     <string name="reopen_todo">Rouvrir</string>
     <string name="checkbox_choices">Autres choix</string>
     <string name="tags_empty">Aucun tag</string>
+    <string name="fold_area">Masquer les projets de la zone</string>
+    <string name="unfold_area">Afficher les projets de la zone</string>
     <string name="state_checked">Cochée</string>
     <string name="state_unchecked">Non cochée</string>
     <string name="state_cancelled">Annulée</string>
