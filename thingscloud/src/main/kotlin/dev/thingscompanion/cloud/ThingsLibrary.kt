@@ -241,6 +241,12 @@ class ThingsLibrary private constructor(
         return template to rule
     }
 
+    /** Of [ids], the tags this library knows, in Things' tag order: what a create may carry in `tg`. */
+    fun knownTags(ids: List<String>): List<String> {
+        val wanted = ids.toSet()
+        return tags().filter { it.id in wanted }.map { it.id }
+    }
+
     /** Projects the app may complete, cancel, reopen, date or edit: not repeating ones. */
     fun canEditProject(task: Task): Boolean =
         task.type == TaskType.PROJECT && !task.trashed && !task.isRepeating && task.isCurrentEntity

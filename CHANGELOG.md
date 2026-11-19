@@ -2,6 +2,17 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.3] - 2026-11-19
+
+### Added
+
+- **Tags when creating.** The new to-do and new project forms have a Tags field; the tags are written with the creation, as Things writes them.
+- **Cancel from the checkbox.** A long press on a to-do's checkbox offers Complete, Cancel or Reopen, as in Things; a cancelled to-do shows a crossed grey box, and a tap reopens it. Undo is offered. On a project's page, a long press on its circle cancels it (or reopens it). Repeats that move on after completion are left to Things.
+
+### Fixed
+
+- Unchecking a cancelled to-do now reopens it (it used to do nothing).
+
 ## [0.4.2] - 2026-11-19
 
 ### Added

@@ -247,4 +247,13 @@
         <item quantity="one">%d day ago</item>
         <item quantity="other">%d days ago</item>
     </plurals>
+    <string name="marked_cancelled">Cancelled</string>
+    <string name="cancel_todo">Cancel to-do</string>
+    <string name="complete_todo">Complete</string>
+    <string name="reopen_todo">Reopen</string>
+    <string name="checkbox_choices">More choices</string>
+    <string name="tags_empty">No tags</string>
+    <string name="state_checked">Checked</string>
+    <string name="state_unchecked">Not checked</string>
+    <string name="state_cancelled">Cancelled</string>
 </resources>

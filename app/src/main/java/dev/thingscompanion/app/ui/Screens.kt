@@ -273,11 +273,30 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     var placeProjectId by rememberSaveable { mutableStateOf<String?>(null) }
     var placeAreaId by rememberSaveable { mutableStateOf<String?>(null) }
     var pickingPlace by remember { mutableStateOf(false) }
+    // Tags picked for a new to-do or project, sent with its creation.
+    var newTagIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var pickingTags by remember { mutableStateOf(false) }
     fun startAdding() {
         placeProjectId = projectId?.takeIf { library?.task(it) != null }
         placeAreaId = areaId?.takeIf { placeProjectId == null && library?.area(it) != null }
+        newTagIds = emptyList()
         adding = true
     }
+    @Composable
+    fun NewTagsDialog() {
+        if (pickingTags && library != null) {
+            TagsDialog(
+                library = library,
+                selected = newTagIds.toSet(),
+                onSave = {
+                    pickingTags = false
+                    newTagIds = it
+                },
+                onDismiss = { pickingTags = false },
+            )
+        }
+    }
+    val newTagTitles = newTagIds.mapNotNull { id -> library?.tags()?.firstOrNull { it.id == id }?.title }
 
     // A widget tap asked to open the add form or a to-do.
     LaunchedEffect(state.launchOpenAdd, state.launchTaskId) {
@@ -331,17 +350,21 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 else -> ListKind.INBOX to stringResource(R.string.list_inbox)
             },
             onPickPlace = { pickingPlace = true },
+            tags = newTagTitles,
+            onPickTags = { pickingTags = true },
             onSubmit = { title, notes, schedule, reminder, checklist, deadline ->
                 adding = false
                 // A to-do filed in a project or area is never in the Inbox.
                 val filedSchedule = if (filed && schedule == Schedule.Inbox) Schedule.Anytime else schedule
-                viewModel.addTask(title, notes, filedSchedule, reminder, checklist, deadline, projectId = addInProject, areaId = addInArea)
+                viewModel.addTask(title, notes, filedSchedule, reminder, checklist, deadline, projectId = addInProject, areaId = addInArea, tagIds = newTagIds)
             },
             onDismiss = { adding = false },
         )
+        NewTagsDialog()
         return
     }
     if (addingProject) {
+        NewTagsDialog()
         TaskFormScreen(
             initial = TaskDraft(schedule = Schedule.Anytime),
             heading = R.string.new_project_title,
@@ -351,9 +374,11 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
             allowChecklist = false,
             allowDeadline = true,
             allowReminder = false,
+            tags = newTagTitles,
+            onPickTags = { pickingTags = true },
             onSubmit = { title, notes, schedule, _, _, deadline ->
                 addingProject = false
-                viewModel.addProject(title, notes, schedule, deadline, areaId = addInArea)
+                viewModel.addProject(title, notes, schedule, deadline, areaId = addInArea, tagIds = newTagIds)
             },
             onDismiss = { addingProject = false },
         )
@@ -504,6 +529,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 onTrash = viewModel::trash,
                 onRestore = viewModel::restore,
                 onReschedule = { schedulingId = it.id },
+                onSetCancelled = viewModel::setCancelled,
             ),
             onOpenArea = {
                 searching = false
@@ -579,6 +605,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
         onTrash = viewModel::trash,
         onRestore = viewModel::restore,
         onReschedule = { schedulingId = it.id },
+        onSetCancelled = viewModel::setCancelled,
     )
     val scheduling = schedulingId?.let { library?.task(it) }
     if (scheduling != null) {
@@ -639,11 +666,11 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                         }
                         areaId != null -> {
                             add(R.string.new_todo_title to { startAdding() })
-                            add(R.string.new_project_title to { addingProject = true })
+                            add(R.string.new_project_title to { newTagIds = emptyList(); addingProject = true })
                         }
                         tab == ListTab.AREAS -> add(R.string.new_area_title to { naming = NameRequest(R.string.new_area_title) { viewModel.addArea(it) } })
                         tab == ListTab.PROJECTS -> {
-                            add(R.string.new_project_title to { addingProject = true })
+                            add(R.string.new_project_title to { newTagIds = emptyList(); addingProject = true })
                             add(R.string.new_area_title to { naming = NameRequest(R.string.new_area_title) { viewModel.addArea(it) } })
                         }
                     }
@@ -806,6 +833,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                     onTags = { taggingId = it },
                     onReschedule = { schedulingId = it },
                     onMove = { movingId = it },
+                    onSetCancelled = viewModel::setCancelled,
                 )
                 openProject != null -> {
                     if (!filter.isEmpty) ActiveFilters(library, filter, viewModel::setFilter)
@@ -1090,7 +1118,57 @@ private class RowActions(
     val onTrash: (String) -> Unit,
     val onRestore: (String) -> Unit,
     val onReschedule: (Task) -> Unit,
+    val onSetCancelled: (String, Boolean) -> Unit = { _, _ -> },
 )
+
+/**
+ * A to-do's checkbox: a tap checks it (or reopens it when cancelled), a long press offers to
+ * complete, cancel or reopen it, as in Things.
+ */
+@Composable
+private fun TodoCheckbox(
+    library: ThingsLibrary,
+    task: Task,
+    onSetDone: (String, Boolean) -> Unit,
+    onSetCancelled: (String, Boolean) -> Unit,
+    size: androidx.compose.ui.unit.Dp = 22.dp,
+) {
+    val canCheck = library.canComplete(task)
+    // Cancelling an "after completion" repeat would have to move its template on: left to Things.
+    val canCancel = canCheck && library.afterCompletionRule(task) == null
+    val cancelled = task.status == TaskStatus.CANCELLED
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        ThingsCheckbox(
+            checked = task.status == TaskStatus.COMPLETED,
+            cancelled = cancelled,
+            onCheckedChange = { if (cancelled) onSetCancelled(task.id, false) else onSetDone(task.id, it) },
+            enabled = canCheck,
+            size = size,
+            onLongClick = { menu = true }.takeIf { canCancel },
+        )
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            if (task.status != TaskStatus.COMPLETED) {
+                DropdownMenuItem(text = { Text(stringResource(R.string.complete_todo)) }, onClick = {
+                    menu = false
+                    onSetDone(task.id, true)
+                })
+            }
+            if (!cancelled) {
+                DropdownMenuItem(text = { Text(stringResource(R.string.cancel_todo)) }, onClick = {
+                    menu = false
+                    onSetCancelled(task.id, true)
+                })
+            }
+            if (!task.isOpen) {
+                DropdownMenuItem(text = { Text(stringResource(R.string.reopen_todo)) }, onClick = {
+                    menu = false
+                    if (cancelled) onSetCancelled(task.id, false) else onSetDone(task.id, false)
+                })
+            }
+        }
+    }
+}
 
 /**
  * Where to move a to-do (Inbox, a project, one of its headings, an area) or a project (an area,
@@ -1611,11 +1689,7 @@ private fun TaskRow(library: ThingsLibrary, task: Task, actions: RowActions, sho
         if (selected != null) {
             SelectionMark(task.id in selected)
         } else {
-            ThingsCheckbox(
-                checked = task.status == TaskStatus.COMPLETED,
-                onCheckedChange = { actions.onSetDone(task.id, it) },
-                enabled = library.canComplete(task),
-            )
+            TodoCheckbox(library, task, actions.onSetDone, actions.onSetCancelled)
         }
         Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
             Text(
@@ -1812,9 +1886,12 @@ private fun ProjectHeader(
     }
     Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // A tap completes it; a long press cancels it (or reopens it once closed), as in Things.
             ThingsCheckbox(
                 checked = project.status == TaskStatus.COMPLETED,
-                onCheckedChange = { request(if (it) TaskStatus.COMPLETED else TaskStatus.OPEN) },
+                cancelled = project.status == TaskStatus.CANCELLED,
+                onCheckedChange = { request(if (it && project.status == TaskStatus.OPEN) TaskStatus.COMPLETED else TaskStatus.OPEN) },
+                onLongClick = { if (project.status == TaskStatus.OPEN) request(TaskStatus.CANCELLED) else onStatus(TaskStatus.OPEN) },
                 enabled = editable,
                 size = 26.dp,
                 contentDescription = stringResource(R.string.complete_project),
@@ -1967,6 +2044,7 @@ private fun TaskDetail(
     onTags: (String) -> Unit = {},
     onReschedule: (String) -> Unit = {},
     onMove: (String) -> Unit = {},
+    onSetCancelled: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val focusManager = LocalFocusManager.current
@@ -1988,12 +2066,7 @@ private fun TaskDetail(
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (task.type == TaskType.TODO) {
-                ThingsCheckbox(
-                    checked = task.status == TaskStatus.COMPLETED,
-                    onCheckedChange = { onSetDone(task.id, it) },
-                    enabled = library.canComplete(task),
-                    size = 24.dp,
-                )
+                TodoCheckbox(library, task, onSetDone, onSetCancelled, size = 24.dp)
             } else {
                 ListIcon(ListKind.PROJECT, Modifier.padding(10.dp), size = 24.dp, progress = library.projectProgress(task.id))
             }

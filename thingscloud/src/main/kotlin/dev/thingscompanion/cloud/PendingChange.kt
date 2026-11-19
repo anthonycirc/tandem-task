@@ -75,6 +75,7 @@ sealed interface PendingChange {
         val projectId: String? = null,
         val headingId: String? = null,
         val areaId: String? = null,
+        val tagIds: List<String> = emptyList(),
     ) : PendingChange {
         val reminder: LocalTime? get() = reminderSecond?.let { LocalTime.ofSecondOfDay(it.toLong()) }
 
@@ -94,6 +95,7 @@ sealed interface PendingChange {
             val payload = InboxTask.payload(
                 title, notes, index, now, schedule, reminder,
                 projectId = projectId.takeIf { headingId == null }, areaId = areaId, headingId = headingId,
+                tagIds = library.knownTags(tagIds),
             )
             return mapOf(taskId to payload)
         }
@@ -108,12 +110,13 @@ sealed interface PendingChange {
         val notes: String,
         val schedule: When,
         val areaId: String? = null,
+        val tagIds: List<String> = emptyList(),
     ) : PendingChange {
         override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
             if (library.task(projectId) != null) return null
             areaId?.let { library.area(it) ?: throw NoSuchElementException("The area no longer exists.") }
             val schedule = schedule.toSchedule().takeIf { it != Schedule.Inbox } ?: Schedule.Anytime
-            return mapOf(projectId to InboxTask.payload(title, notes, library.nextProjectIndex(areaId), now, schedule, type = 1, areaId = areaId))
+            return mapOf(projectId to InboxTask.payload(title, notes, library.nextProjectIndex(areaId), now, schedule, type = 1, areaId = areaId, tagIds = library.knownTags(tagIds)))
         }
     }
 
@@ -181,13 +184,29 @@ sealed interface PendingChange {
 
         override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
             val task = library.task(taskId) ?: throw NoSuchElementException("The to-do no longer exists.")
-            if ((task.status == TaskStatus.COMPLETED) == done) return null
+            // Unchecking also reopens a cancelled to-do.
+            if (if (done) task.status == TaskStatus.COMPLETED else task.status == TaskStatus.OPEN) return null
             require(library.canComplete(task)) { "This to-do can't be checked from the app." }
             val completion = mapOf(taskId to TaskEdits.complete(task, done, now))
             // An "after completion" repeat also moves its template on, in the same item.
             val (template, rule) = library.afterCompletionRule(task) ?: return completion
             val completedOn = day?.let(LocalDate::ofEpochDay) ?: ThingsDay.today(Instant.ofEpochMilli((now * 1000).toLong()))
             return completion + (template.id to TaskEdits.afterCompletion(template, rule, completedOn))
+        }
+    }
+
+    /** A to-do cancelled, or reopened after a cancel, as Things writes it ({ss, sp, md}); repeats moving on after completion are left to Things. */
+    @Serializable
+    @SerialName("cancel")
+    data class SetCancelled(override val opId: String, val taskId: String, val cancelled: Boolean) : PendingChange {
+        override val replaces get() = "done:$taskId"
+
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            val task = library.task(taskId) ?: throw NoSuchElementException("The to-do no longer exists.")
+            // Reopening only undoes a cancel; a completed to-do is unchecked with SetDone.
+            if (cancelled == (task.status == TaskStatus.CANCELLED) || (!cancelled && task.status != TaskStatus.CANCELLED)) return null
+            require(library.canComplete(task) && library.afterCompletionRule(task) == null) { "This to-do can't be cancelled from the app." }
+            return mapOf(taskId to TaskEdits.setStatus(task, if (cancelled) TaskStatus.CANCELLED else TaskStatus.OPEN, now))
         }
     }
 

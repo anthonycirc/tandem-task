@@ -233,10 +233,11 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         deadline: LocalDate? = null,
         projectId: String? = null,
         areaId: String? = null,
+        tagIds: List<String> = emptyList(),
     ) {
         val taskId = newId()
         change(
-            PendingChange.AddTask(newId(), taskId, title, notes, PendingChange.When.of(schedule), reminder?.toSecondOfDay(), projectId = projectId, areaId = areaId),
+            PendingChange.AddTask(newId(), taskId, title, notes, PendingChange.When.of(schedule), reminder?.toSecondOfDay(), projectId = projectId, areaId = areaId, tagIds = tagIds),
             // Name the Inbox when that is where it went; elsewhere (Today, a date…) just confirm.
             done = if (schedule == Schedule.Inbox) R.string.added_to_inbox else R.string.added,
         )
@@ -270,9 +271,9 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun addProject(title: String, notes: String, schedule: Schedule, deadline: LocalDate?, areaId: String?) {
+    fun addProject(title: String, notes: String, schedule: Schedule, deadline: LocalDate?, areaId: String?, tagIds: List<String> = emptyList()) {
         val id = newId()
-        change(PendingChange.AddProject(newId(), id, title, notes, PendingChange.When.of(schedule), areaId), done = R.string.added)
+        change(PendingChange.AddProject(newId(), id, title, notes, PendingChange.When.of(schedule), areaId, tagIds), done = R.string.added)
         deadline?.let { change(PendingChange.SetDeadline(newId(), id, it.toEpochDay())) }
     }
 
@@ -335,6 +336,17 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setDone(id: String, done: Boolean) =
         change(PendingChange.SetDone(newId(), id, done, day = ThingsDay.today().toEpochDay()), if (done) R.string.marked_done else R.string.marked_open)
+
+    /** Cancels a to-do (or reopens a cancelled one), as a long press on its checkbox does in Things; the snackbar offers Undo. */
+    fun setCancelled(id: String, cancelled: Boolean) {
+        val task = _state.value.library?.task(id) ?: return
+        val undo = when (task.status) {
+            TaskStatus.COMPLETED -> PendingChange.SetDone(newId(), id, true)
+            TaskStatus.CANCELLED -> PendingChange.SetCancelled(newId(), id, true)
+            TaskStatus.OPEN -> PendingChange.SetCancelled(newId(), id, false)
+        }
+        change(PendingChange.SetCancelled(newId(), id, cancelled), if (cancelled) R.string.marked_cancelled else R.string.marked_open, undo = undo)
+    }
 
     /** Swipe to reschedule: the to-do's own title and notes, a new When; the reminder stays when there is still a day. */
     fun reschedule(id: String, schedule: Schedule) {

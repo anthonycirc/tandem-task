@@ -126,6 +126,9 @@ fun TaskFormScreen(
     allowReminder: Boolean = true,
     place: Pair<ListKind, String>? = null,
     onPickPlace: (() -> Unit)? = null,
+    /** The tags picked for a new item (titles), and how to pick them; null where the form doesn't offer tags. */
+    tags: List<String>? = null,
+    onPickTags: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     val today = ThingsDay.today()
@@ -328,6 +331,24 @@ fun TaskFormScreen(
                     },
                     label = { Text(place.second, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     leadingIcon = { ListIcon(place.first, size = 16.dp) },
+                )
+            }
+
+            if (tags != null && onPickTags != null) {
+                Text(stringResource(R.string.tags_edit), style = MaterialTheme.typography.labelLarge)
+                AssistChip(
+                    onClick = {
+                        hideKeyboard()
+                        onPickTags()
+                    },
+                    label = {
+                        Text(
+                            tags.joinToString(", ").ifEmpty { stringResource(R.string.tags_empty) },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    leadingIcon = { TagGlyph(MaterialTheme.colorScheme.onSurfaceVariant, size = 16.dp) },
                 )
             }
 

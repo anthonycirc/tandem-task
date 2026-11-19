@@ -119,6 +119,7 @@ object InboxTask {
         projectId: String? = null,
         areaId: String? = null,
         headingId: String? = null,
+        tagIds: List<String> = emptyList(),
     ): JsonObject {
         val trimmedTitle = title.trim()
         require(trimmedTitle.isNotEmpty()) { "The title is empty." }
@@ -160,7 +161,7 @@ object InboxTask {
                 put("sr", day)
                 put("ss", 0)
                 put("st", startCode(start))
-                put("tg", empty)
+                put("tg", JsonArray(tagIds.map(::JsonPrimitive)))
                 put("ti", 0)
                 put("tir", day)
                 put("tp", type)

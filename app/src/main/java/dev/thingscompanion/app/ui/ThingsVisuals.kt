@@ -1,6 +1,11 @@
 package dev.thingscompanion.app.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.res.stringResource
+import dev.thingscompanion.app.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
@@ -141,9 +146,11 @@ fun ListIcon(kind: ListKind, modifier: Modifier = Modifier, size: Dp = 22.dp, pr
 }
 
 /**
- * The to-do checkbox Things draws: a small rounded square, filled with a check once done.
- * [locked] (repeating to-dos the app can't check) draws it faded.
+ * The to-do checkbox Things draws: a small rounded square, filled with a check once done, or
+ * crossed in grey once [cancelled]. A disabled box (repeating to-dos the app can't check) is faded.
+ * With [onLongClick], a long press offers more (cancel, as in Things).
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ThingsCheckbox(
     checked: Boolean,
@@ -152,19 +159,35 @@ fun ThingsCheckbox(
     enabled: Boolean = true,
     size: Dp = 22.dp,
     contentDescription: String? = null,
+    cancelled: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val outline = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 0.7f else 0.3f)
+    val state = stringResource(if (checked) R.string.state_checked else if (cancelled) R.string.state_cancelled else R.string.state_unchecked)
+    val toggle = if (onLongClick != null) {
+        Modifier
+            .semantics { stateDescription = state }
+            .combinedClickable(enabled = enabled, role = Role.Checkbox, onClick = { onCheckedChange(!checked) }, onLongClick = onLongClick)
+    } else {
+        Modifier.toggleable(value = checked, enabled = enabled, role = Role.Checkbox, onValueChange = onCheckedChange)
+    }
     Box(
         modifier
             .size(44.dp)
-            .toggleable(value = checked, enabled = enabled, role = Role.Checkbox, onValueChange = onCheckedChange)
+            .then(toggle)
             .then(if (contentDescription != null) Modifier.semantics { this.contentDescription = contentDescription } else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(size)) {
             val w = this.size.width
             val radius = CornerRadius(w * 0.24f)
-            if (checked) {
+            if (cancelled) {
+                val grey = outline.copy(alpha = 0.6f)
+                drawRoundRect(grey, cornerRadius = radius, style = Stroke(width = w * 0.08f))
+                val cross = Stroke(width = w * 0.1f, cap = StrokeCap.Round)
+                drawLine(grey, Offset(w * 0.3f, w * 0.3f), Offset(w * 0.7f, w * 0.7f), strokeWidth = cross.width, cap = StrokeCap.Round)
+                drawLine(grey, Offset(w * 0.7f, w * 0.3f), Offset(w * 0.3f, w * 0.7f), strokeWidth = cross.width, cap = StrokeCap.Round)
+            } else if (checked) {
                 drawRoundRect(ListColors.checked.copy(alpha = if (enabled) 1f else 0.5f), cornerRadius = radius)
                 val check = Path().apply {
                     moveTo(w * 0.26f, w * 0.52f)
