@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import dev.thingscompanion.cloud.RepeatUnit
 import dev.thingscompanion.cloud.TaskEdits
 import dev.thingscompanion.cloud.RepeatRule
@@ -2627,18 +2628,14 @@ private fun SettingsDialog(
                 HorizontalDivider()
                 // How the lists are reached.
                 Text(stringResource(R.string.navigation_title), style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Each choice with a sketch of the screen it gives.
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     NavLayout.entries.forEach { layout ->
-                        FilterChip(
+                        NavLayoutChoice(
+                            layout = layout,
                             selected = navLayout == layout,
                             onClick = { onNavLayoutChange(layout) },
-                            label = {
-                                Text(stringResource(when (layout) {
-                                    NavLayout.TABS -> R.string.navigation_tabs
-                                    NavLayout.DRAWER -> R.string.navigation_drawer
-                                    NavLayout.BOTTOM -> R.string.navigation_bottom
-                                }))
-                            },
+                            modifier = Modifier.weight(1f),
                         )
                     }
                 }
@@ -2850,4 +2847,60 @@ private fun CountedListIcon(list: ListTab, counts: ListCounts?, size: androidx.c
             }
         },
     ) { ListIcon(list.kind, size = size) }
+}
+
+/** A Navigation choice in Settings: a small sketch of the screen (tabs, side menu or bottom bar) and its name. */
+@Composable
+private fun NavLayoutChoice(layout: NavLayout, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val accent = MaterialTheme.colorScheme.primary
+    val line = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+    val label = stringResource(when (layout) {
+        NavLayout.TABS -> R.string.navigation_tabs
+        NavLayout.DRAWER -> R.string.navigation_drawer
+        NavLayout.BOTTOM -> R.string.navigation_bottom
+    })
+    Column(
+        modifier
+            .clip(MaterialTheme.shapes.medium)
+            .border(if (selected) 2.dp else 1.dp, if (selected) accent else line, MaterialTheme.shapes.medium)
+            .clickable(onClickLabel = label, onClick = onClick)
+            .semantics { this.selected = selected }
+            .padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Canvas(Modifier.size(width = 44.dp, height = 72.dp)) {
+            val w = size.width
+            val h = size.height
+            val stroke = 1.5.dp.toPx()
+            drawRoundRect(line, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke), cornerRadius = androidx.compose.ui.geometry.CornerRadius(6.dp.toPx()))
+            // Rows of the list.
+            val left = if (layout == NavLayout.DRAWER) w * 0.5f else w * 0.18f
+            val top = if (layout == NavLayout.TABS) h * 0.3f else h * 0.18f
+            repeat(4) { i ->
+                val y = top + i * h * 0.12f
+                drawLine(line, Offset(left, y), Offset(w * 0.82f, y), strokeWidth = stroke, cap = StrokeCap.Round)
+            }
+            when (layout) {
+                NavLayout.TABS -> repeat(3) { i ->
+                    val x = w * (0.18f + i * 0.24f)
+                    drawLine(if (i == 0) accent else line, Offset(x, h * 0.14f), Offset(x + w * 0.16f, h * 0.14f), strokeWidth = stroke * 2, cap = StrokeCap.Round)
+                }
+                NavLayout.DRAWER -> {
+                    drawRect(accent.copy(alpha = 0.18f), topLeft = Offset(stroke, stroke), size = androidx.compose.ui.geometry.Size(w * 0.4f, h - 2 * stroke))
+                    repeat(4) { i ->
+                        val y = h * (0.18f + i * 0.12f)
+                        drawLine(accent, Offset(w * 0.1f, y), Offset(w * 0.32f, y), strokeWidth = stroke, cap = StrokeCap.Round)
+                    }
+                }
+                NavLayout.BOTTOM -> {
+                    drawLine(line, Offset(0f, h * 0.84f), Offset(w, h * 0.84f), strokeWidth = stroke)
+                    repeat(4) { i ->
+                        drawCircle(if (i == 0) accent else line, radius = 2.5.dp.toPx(), center = Offset(w * (0.2f + i * 0.2f), h * 0.92f))
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 2)
+    }
 }

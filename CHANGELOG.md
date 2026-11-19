@@ -2,6 +2,14 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-11-19
+
+Navigation, your way: tabs at the top, a side menu or a bar at the bottom (0.4.6 to 0.4.9), now shown as a choice of three sketches in Settings.
+
+### Changed
+
+- **Navigation choices with a preview.** In Settings, each Navigation choice shows a small sketch of the screen it gives (tabs, side menu, bottom bar).
+
 ## [0.4.9] - 2026-11-19
 
 ### Added

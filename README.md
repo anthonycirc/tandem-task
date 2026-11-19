@@ -16,7 +16,8 @@ Things has no Android app. Tandem Task brings your lists, notes and reminders to
 
 - **Your lists**: Today (with This Evening and what is due), Inbox, Upcoming (grouped by day, deadlines included), Deadlines (overdue first, then by day), Anytime, Someday, Projects (grouped by area, each area folding open or closed) and Trash, with notes, checklists, tags, deadlines and repeat rules. Projects show their to-dos under their headings.
 - **Search**: pull a list down, or tap the magnifier, to find to-dos, projects and areas by title or notes, and lists by name.
-- **Your tabs, your order**: in Settings, reorder the lists and hide the ones you don't use; hidden lists stay one search away.
+- **Navigation, your way**: tabs at the top, a side menu with your lists, areas and projects (as Things' sidebar), or a bar at the bottom, chosen in Settings. Counts show next to the Inbox, Today and overdue deadlines.
+- **Your lists, your order**: in Settings, reorder the lists and hide the ones you don't use; hidden lists stay one search away.
 - **Works offline, never waits**: every change shows at once. Changes are kept on the phone and sent in the background a few seconds after your last tap, or later when the network comes back.
 - **Swipe actions**: swipe a to-do left to reschedule (Today, This Evening, Tomorrow, a date, Anytime, Someday), repeating ones included, swipe right past halfway to move it to the Trash (a short swipe slides back), with Undo. Projects, headings and areas are deleted the same way.
 - **Select several**: pick to-dos or projects, then reschedule, move, check off or trash them at once.
@@ -57,21 +58,19 @@ See the [changelog](CHANGELOG.md) for what changed in each version.
 
 ## Screenshots
 
-| Today | To-do details | Swipe left to reschedule |
-|:---:|:---:|:---:|
-| <img src="docs/screenshots/light-today.png" width="260"> | <img src="docs/screenshots/light-detail.png" width="260"> | <img src="docs/screenshots/light-when.png" width="260"> |
+**Navigation, your way**: tabs at the top, a side menu or a bottom bar, chosen in Settings.
 
-| Dark mode | Deadlines | New to-do with tags |
-|:---:|:---:|:---:|
-| <img src="docs/screenshots/dark-today.png" width="260"> | <img src="docs/screenshots/dark-deadlines.png" width="260"> | <img src="docs/screenshots/dark-add.png" width="260"> |
+<img src="docs/screenshots/montage-navigation.png" alt="Settings, tabs at the top, side menu and bottom bar" width="100%">
 
-| Project with headings | Projects and areas | Markdown in notes |
-|:---:|:---:|:---:|
-| <img src="docs/screenshots/light-project.png" width="260"> | <img src="docs/screenshots/light-projects.png" width="260"> | <img src="docs/screenshots/light-markdown.png" width="260"> |
+**Your lists**: Today, Deadlines, projects with headings, areas that fold.
 
-| Your tabs, your order |
-|:---:|
-| <img src="docs/screenshots/dark-settings.png" width="260"> |
+<img src="docs/screenshots/montage-lists.png" alt="Today in dark mode, Deadlines, a project, Projects and areas" width="100%">
+
+**Your to-dos**: details in a sheet, swipe to reschedule, tags when creating, Markdown notes.
+
+<img src="docs/screenshots/montage-todos.png" alt="To-do details, When menu, new to-do, Markdown notes" width="100%">
+
+**Home-screen widget**: reminders and deadlines stand out.
 
 <p align="center"><img src="docs/screenshots/widget.png" alt="Home-screen widget" width="520"></p>
 
