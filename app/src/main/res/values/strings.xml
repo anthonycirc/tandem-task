@@ -268,4 +268,5 @@
     <string name="navigation_tabs">Tabs at the top</string>
     <string name="navigation_drawer">Side menu</string>
     <string name="open_menu">Open the menu</string>
+    <string name="navigation_bottom">Bar at the bottom</string>
 </resources>

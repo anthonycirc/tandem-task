@@ -74,8 +74,8 @@ data class UiState(
     val demo: Boolean = false,
 )
 
-/** How the lists are reached: tabs at the top, or a side menu sliding from the left as in Things and Todoist. */
-enum class NavLayout { TABS, DRAWER }
+/** How the lists are reached: tabs at the top, a side menu sliding from the left as in Things and Todoist, or a bar at the bottom. */
+enum class NavLayout { TABS, DRAWER, BOTTOM }
 
 /** App appearance: follow the system, or force light or dark. Remembered across launches. */
 enum class ThemeMode { SYSTEM, LIGHT, DARK }

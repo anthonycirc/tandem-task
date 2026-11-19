@@ -88,6 +88,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -680,6 +682,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     // Areas folded closed, shared by the Projects list and the side menu.
     var foldedAreas by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val drawer = state.navLayout == NavLayout.DRAWER
+    val bottom = state.navLayout == NavLayout.BOTTOM
+    var moreOpen by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val drawerScope = rememberCoroutineScope()
     fun openList(list: ListTab) {
@@ -692,6 +696,50 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     val screen = @Composable {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
+        bottomBar = {
+            if (bottom && library != null) {
+                // The lists of Settings > Lists in a bar; past five, the rest sit behind More.
+                val shown = (if (tab in shownTabs) shownTabs else shownTabs + tab).map { it.name }
+                val split = ListLayout.bottomBar(shown, current = tab.name)
+                val atList = projectId == null && areaId == null
+                NavigationBar {
+                    split.bar.map(ListTab::valueOf).forEach { list ->
+                        NavigationBarItem(
+                            selected = atList && list == tab,
+                            onClick = { openList(list) },
+                            icon = { ListIcon(list.kind, size = 22.dp) },
+                            label = { Text(stringResource(list.label), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        )
+                    }
+                    if (split.more.isNotEmpty()) {
+                        NavigationBarItem(
+                            selected = false,
+                            onClick = { moreOpen = true },
+                            icon = { Icon(Icons.Filled.MoreVert, contentDescription = null) },
+                            label = { Text(stringResource(R.string.more), maxLines = 1) },
+                        )
+                    }
+                }
+                if (moreOpen) {
+                    ModalBottomSheet(onDismissRequest = { moreOpen = false }) {
+                        Column(Modifier.padding(bottom = 24.dp)) {
+                            split.more.map(ListTab::valueOf).forEach { list ->
+                                NavigationDrawerItem(
+                                    label = { Text(stringResource(list.label)) },
+                                    icon = { ListIcon(list.kind, size = 22.dp) },
+                                    selected = false,
+                                    onClick = {
+                                        moreOpen = false
+                                        openList(list)
+                                    },
+                                    modifier = Modifier.padding(horizontal = 12.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
         floatingActionButton = {
             if (library != null && taskId == null && tab != ListTab.TRASH && selection == null) {
                 // In a project, an area or Projects, + offers what can be created there, as in Things.
@@ -920,7 +968,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 })) {
                     // A hidden list opened from the search shows as a tab while it is open.
                     val tabs = if (tab in shownTabs) shownTabs else shownTabs + tab
-                    if (!drawer) {
+                    if (!drawer && !bottom) {
                         PrimaryScrollableTabRow(selectedTabIndex = tabs.indexOf(tab), edgePadding = 8.dp) {
                             tabs.forEach { entry ->
                                 Tab(
@@ -2582,6 +2630,7 @@ private fun SettingsDialog(
                                 Text(stringResource(when (layout) {
                                     NavLayout.TABS -> R.string.navigation_tabs
                                     NavLayout.DRAWER -> R.string.navigation_drawer
+                                    NavLayout.BOTTOM -> R.string.navigation_bottom
                                 }))
                             },
                         )

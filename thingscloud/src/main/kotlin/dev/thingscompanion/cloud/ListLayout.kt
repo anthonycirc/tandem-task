@@ -21,4 +21,22 @@ object ListLayout {
         if (from < 0 || to !in order.indices) return order
         return order.toMutableList().apply { add(to, removeAt(from)) }
     }
+
+    /** What a bottom bar shows: [bar] as buttons, [more] behind a More button (empty when all fit). */
+    data class Bar(val bar: List<String>, val more: List<String>)
+
+    /**
+     * Up to [BAR_SLOTS] lists fit; beyond that, the first four and a More button for the rest. A [current]
+     * list that would sit behind More takes the fourth place, so the open list always shows in the bar.
+     */
+    fun bottomBar(shown: List<String>, current: String? = null): Bar {
+        if (shown.size <= BAR_SLOTS) return Bar(shown, emptyList())
+        val first = shown.take(BAR_SLOTS - 1)
+        if (current == null || current in first || current !in shown) return Bar(first, shown.drop(BAR_SLOTS - 1))
+        val bar = first.dropLast(1) + current
+        return Bar(bar, shown.filter { it !in bar })
+    }
+
+    /** Buttons a bottom bar holds, as Material's navigation bar suggests. */
+    const val BAR_SLOTS = 5
 }

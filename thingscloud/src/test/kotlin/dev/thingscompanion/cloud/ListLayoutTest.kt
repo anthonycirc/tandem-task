@@ -36,4 +36,17 @@ class ListLayoutTest {
         assertEquals(all, ListLayout.move(all, "TODAY", -1))
         assertEquals(all, ListLayout.move(all, "TRASH", 1))
     }
+
+    @Test
+    fun `the bottom bar holds up to five lists, beyond that four and a More menu with the rest`() {
+        assertEquals(ListLayout.Bar(listOf("TODAY", "INBOX", "UPCOMING"), emptyList()), ListLayout.bottomBar(listOf("TODAY", "INBOX", "UPCOMING")))
+        assertEquals(ListLayout.Bar(all.take(5), emptyList()), ListLayout.bottomBar(all.take(5)))
+        assertEquals(ListLayout.Bar(all.take(4), listOf("PROJECTS", "TRASH")), ListLayout.bottomBar(all))
+    }
+
+    @Test
+    fun `a list opened from More or the search shows in the bar in place of the fourth one`() {
+        assertEquals(ListLayout.Bar(listOf("TODAY", "INBOX", "UPCOMING", "TRASH"), listOf("DEADLINES", "PROJECTS")), ListLayout.bottomBar(all, current = "TRASH"))
+        assertEquals(ListLayout.bottomBar(all), ListLayout.bottomBar(all, current = "INBOX"))
+    }
 }

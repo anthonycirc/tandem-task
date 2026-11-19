@@ -2,6 +2,12 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.8] - 2026-11-19
+
+### Added
+
+- **A bar at the bottom.** A third Navigation choice puts your lists in a bar at the bottom of the screen, in the order set under Lists. Up to five fit; beyond that, the first four and a More button that opens the others. A list opened from More or the search takes the fourth place while it is open.
+
 ## [0.4.7] - 2026-11-19
 
 ### Added
