@@ -57,17 +57,21 @@ See the [changelog](CHANGELOG.md) for what changed in each version.
 
 ## Screenshots
 
-| Today | To-do with checklist | Swipe left to reschedule |
+| Today | To-do details | Swipe left to reschedule |
 |:---:|:---:|:---:|
 | <img src="docs/screenshots/light-today.png" width="260"> | <img src="docs/screenshots/light-detail.png" width="260"> | <img src="docs/screenshots/light-when.png" width="260"> |
 
-| Dark mode | Upcoming | New to-do |
+| Dark mode | Deadlines | New to-do with tags |
 |:---:|:---:|:---:|
-| <img src="docs/screenshots/dark-today.png" width="260"> | <img src="docs/screenshots/dark-upcoming.png" width="260"> | <img src="docs/screenshots/dark-add.png" width="260"> |
+| <img src="docs/screenshots/dark-today.png" width="260"> | <img src="docs/screenshots/dark-deadlines.png" width="260"> | <img src="docs/screenshots/dark-add.png" width="260"> |
 
-| Project with headings | Areas | Markdown in notes |
+| Project with headings | Projects and areas | Markdown in notes |
 |:---:|:---:|:---:|
-| <img src="docs/screenshots/light-project.png" width="260"> | <img src="docs/screenshots/light-areas.png" width="260"> | <img src="docs/screenshots/light-markdown.png" width="260"> |
+| <img src="docs/screenshots/light-project.png" width="260"> | <img src="docs/screenshots/light-projects.png" width="260"> | <img src="docs/screenshots/light-markdown.png" width="260"> |
+
+| Your tabs, your order |
+|:---:|
+| <img src="docs/screenshots/dark-settings.png" width="260"> |
 
 <p align="center"><img src="docs/screenshots/widget.png" alt="Home-screen widget" width="520"></p>
 
