@@ -68,7 +68,8 @@ class ReorderTest {
     @Test
     fun `in Today the order is ti within the section dropped in, and crossing into This Evening sets sb`() {
         val today = library(
-            """{"x": ${todo(1, ""","st": 1, "ti": 5""")}, "y": ${todo(2, ""","st": 1, "ti": 9""")}, "z": ${todo(3, ""","st": 1, "ti": 1, "sb": 1""")}}""",
+            // Rows of Today are dated (sr): undated ones there are only shown for their deadline.
+            """{"x": ${todo(1, ""","st": 1, "sr": 1794700800, "ti": 5""")}, "y": ${todo(2, ""","st": 1, "sr": 1794700800, "ti": 9""")}, "z": ${todo(3, ""","st": 1, "sr": 1794700800, "ti": 1, "sb": 1""")}}""",
         )
         // x (ti 5) already follows z (ti 1): only its section changes.
         val toEvening = written(PendingChange.Reorder("op", "x", listOf("z", "x"), "today", todayOrder = true, evening = true).build(today, now))

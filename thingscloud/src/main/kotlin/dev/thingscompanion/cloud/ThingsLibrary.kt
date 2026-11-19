@@ -55,6 +55,9 @@ data class Task(
     val isOpen get() = status == TaskStatus.OPEN
 
     val isRepeating get() = isRecurrenceTemplate || repeatType != null || recurrenceTemplateIds.isNotEmpty()
+
+    /** The day it is filed under in Upcoming: its start date, or for an undated item its deadline, as Things does. */
+    val upcomingDay: LocalDate? get() = startDate ?: deadline
 }
 
 /** A heading of a project and its to-dos; [heading] is null for the to-dos under no heading. */
@@ -159,13 +162,22 @@ class ThingsLibrary private constructor(
     fun inbox(closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) { it.isTodo && it.start == StartList.INBOX && it.projectId == null && it.areaId == null }
         .sortedWith(byIndex)
 
+    /** Dated to-dos up to today, and, as in Things, undated ones (Inbox included) once their deadline is today or past. */
     fun today(today: LocalDate, closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) {
-        it.isTodo && it.start != StartList.INBOX && it.startDate != null && !it.startDate.isAfter(today)
+        it.isTodo && !it.isRecurrenceTemplate && (
+            (it.start != StartList.INBOX && it.startDate != null && !it.startDate.isAfter(today)) ||
+                (it.startDate == null && it.deadline != null && !it.deadline.isAfter(today))
+            )
     }.sortedWith(compareBy<Task>({ it.evening }, { it.todayIndex }, { it.index }, { it.id }))
 
+    /** Items scheduled after today, and undated ones due after today, each under its [Task.upcomingDay]. */
     fun upcoming(today: LocalDate, closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) {
-        it.type != TaskType.HEADING && !it.isRecurrenceTemplate && it.startDate != null && it.startDate.isAfter(today)
-    }.sortedWith(compareBy<Task>({ it.startDate }, { it.index }, { it.id }))
+        it.type != TaskType.HEADING && !it.isRecurrenceTemplate && (
+            it.startDate?.isAfter(today) == true ||
+                // Undated: Anytime or Someday, not the Inbox, as in Things.
+                (it.startDate == null && it.start != StartList.INBOX && it.deadline?.isAfter(today) == true)
+            )
+    }.sortedWith(compareBy<Task>({ it.upcomingDay }, { it.index }, { it.id }))
 
     fun anytime(today: LocalDate, closedOn: LocalDate? = null, zone: ZoneId = ZoneId.systemDefault()): List<Task> = visible(closedOn, zone) {
         it.isTodo && it.start == StartList.ANYTIME &&

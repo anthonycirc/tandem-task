@@ -33,6 +33,8 @@ class WidgetColors(theme: WidgetTheme, opacityPercent: Int, color: WidgetColor =
     val text = if (tint != null) ColorProvider(Color.White) else pick(theme, LIGHT_TEXT, DARK_TEXT)
     val secondary = if (tint != null) ColorProvider(Color.White.copy(alpha = 0.75f)) else pick(theme, LIGHT_SECONDARY, DARK_SECONDARY)
     val accent = if (tint != null) ColorProvider(Color.White) else pick(theme, LIGHT_ACCENT, DARK_ACCENT)
+    /** Deadlines, in Things' red; on a coloured background, white like the text. */
+    val deadline = if (tint != null) ColorProvider(Color.White) else pick(theme, LIGHT_DEADLINE, DARK_DEADLINE)
 
     private fun pick(theme: WidgetTheme, light: Color, dark: Color): androidx.glance.unit.ColorProvider = when (theme) {
         WidgetTheme.SYSTEM -> ColorProvider(day = light, night = dark)
@@ -49,5 +51,7 @@ class WidgetColors(theme: WidgetTheme, opacityPercent: Int, color: WidgetColor =
         val DARK_TEXT = Color(0xFFE6E1E5)
         val DARK_SECONDARY = Color(0xFFB9B4BE)
         val DARK_ACCENT = Color(0xFF9DB7FF)
+        val LIGHT_DEADLINE = Color(0xFFE5484D)
+        val DARK_DEADLINE = Color(0xFFFF7A7E)
     }
 }

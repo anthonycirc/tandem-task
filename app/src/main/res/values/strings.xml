@@ -238,4 +238,13 @@
         <item quantity="one">%d skipped</item>
         <item quantity="other">%d skipped</item>
     </plurals>
+    <string name="deadline_today">Due today</string>
+    <plurals name="deadline_days_left">
+        <item quantity="one">%d day left</item>
+        <item quantity="other">%d days left</item>
+    </plurals>
+    <plurals name="deadline_days_ago">
+        <item quantity="one">%d day ago</item>
+        <item quantity="other">%d days ago</item>
+    </plurals>
 </resources>

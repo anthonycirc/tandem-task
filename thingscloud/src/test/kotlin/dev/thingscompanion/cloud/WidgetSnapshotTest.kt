@@ -94,4 +94,26 @@ class WidgetSnapshotTest {
         assertEquals(snapshot, restored)
         assertEquals(42, restored.updatedAtMillis)
     }
+
+    @Test
+    fun `items carry their deadline and reminder for the widget to highlight`() {
+        val lib = library(
+            """{"due": {"t": 0, "e": "Task7", "p": {"tt": "Due", "st": 1, "sr": $day15, "dd": ${day15 + 86_400}, "ato": 34200}},
+                "plain": {"t": 0, "e": "Task7", "p": {"tt": "Plain", "st": 1, "sr": $day15}}}"""
+        )
+
+        val items = WidgetSnapshot.from(lib, today, updatedAtMillis = 42).items("today").associateBy { it.id }
+
+        assertEquals(LocalDate.of(2026, 11, 16).toEpochDay(), items.getValue("due").deadlineDay)
+        assertEquals(34_200, items.getValue("due").reminderSeconds)
+        assertEquals(null, items.getValue("plain").deadlineDay)
+        assertEquals(null, items.getValue("plain").reminderSeconds)
+    }
+
+    @Test
+    fun `a snapshot written before deadlines were kept still reads`() {
+        val old = """{"updatedAtMillis": 1, "lists": {"today": [{"id": "a", "title": "A"}]}, "projects": []}"""
+
+        assertEquals(null, WidgetSnapshot.fromJson(old).items("today").single().deadlineDay)
+    }
 }

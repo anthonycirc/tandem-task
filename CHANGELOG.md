@@ -2,6 +2,13 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.2] - 2026-11-19
+
+### Added
+
+- **Deadlines in Today and Upcoming, as in Things.** A to-do with no date whose deadline is today or past now shows in Today; an undated to-do or project due later shows in Upcoming, under its deadline's day. Rows say how many days are left (or how late it is) instead of the date.
+- **The widget highlights deadlines and reminders**: under a to-do's title, its reminder time and its deadline ("2 days left", in red).
+
 ## [0.4.1] - 2026-11-19
 
 ### Added

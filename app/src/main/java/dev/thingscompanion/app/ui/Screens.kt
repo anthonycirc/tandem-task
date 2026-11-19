@@ -940,7 +940,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                                     val (evening, day) = tasks.partition { it.evening }
                                     listOf(Group.None to day, Group.Evening to evening)
                                 }
-                                ListTab.UPCOMING -> tasks.groupBy { it.startDate }.map { (date, items) ->
+                                // Undated items due later are filed under their deadline day, as in Things.
+                                ListTab.UPCOMING -> tasks.groupBy { it.upcomingDay }.map { (date, items) ->
                                     (date?.let(Group::Day) ?: Group.None) to items
                                 }
                                 else -> listOf(Group.None to tasks)
@@ -960,6 +961,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                                         viewModel.reorder(task.id, order, tab.name)
                                     }
                                 }.takeIf { filter.isEmpty && tab != ListTab.UPCOMING },
+                                // In Today only for its deadline: no Today order to change.
+                                canDrag = { tab != ListTab.TODAY || it.startDate != null },
                             )
                         }
                     }
@@ -1380,6 +1383,7 @@ private fun TaskList(
     onHeading: (Group.Heading) -> Unit = {},
     onDrop: ((task: Task, section: Group, order: List<String>) -> Unit)? = null,
     onHeadingsDrop: ((headingId: String, order: List<String>) -> Unit)? = null,
+    canDrag: (Task) -> Boolean = { true },
 ) {
     val built = remember(groups) {
         groups.withIndex().flatMap { (index, entry) ->
@@ -1416,7 +1420,7 @@ private fun TaskList(
         }
     }
     fun draggable(row: ListRow) = actions.selected == null && when (row) {
-        is TaskItemRow -> onDrop != null && row.task.isOpen && library.canReorder(row.task)
+        is TaskItemRow -> onDrop != null && row.task.isOpen && library.canReorder(row.task) && canDrag(row.task)
         is HeaderRow -> onHeadingsDrop != null && row.group is Group.Heading
     }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
@@ -1661,10 +1665,11 @@ private fun RowDetails(library: ThingsLibrary, task: Task, showWhen: Boolean) {
             }
         }
         task.deadline?.let { deadline ->
+            // As in Things: how many days are left, or how late it is.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 DeadlineFlag()
                 Spacer(Modifier.width(2.dp))
-                Text(deadline.format(dateFormat), style = small, color = ListColors.deadline)
+                Text(deadlineText(LocalContext.current, deadline, ThingsDay.today()), style = small, color = ListColors.deadline)
             }
         }
         if (task.isRepeating) RepeatGlyph(muted, Modifier.padding(top = 3.dp))

@@ -278,7 +278,9 @@ sealed interface PendingChange {
         override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
             val task = library.task(taskId) ?: throw NoSuchElementException("The to-do no longer exists.")
             require(library.canReorder(task)) { "This can't be reordered from the app." }
-            val siblings = order.mapNotNull(library::task).filter(library::canReorder)
+            // Today shows undated to-dos for their deadline; Things never gives them a Today order or evening.
+            require(!todayOrder || task.startDate != null) { "This to-do is in Today for its deadline only." }
+            val siblings = order.mapNotNull(library::task).filter { library.canReorder(it) && (!todayOrder || it.startDate != null) }
             val indexes = TaskEdits.placeIndexes(siblings, task, if (todayOrder) Task::todayIndex else Task::index)
             val key = if (todayOrder) "ti" else "ix"
             val sections = if (todayOrder && evening != null && evening != task.evening) mapOf(taskId to evening) else emptyMap()

@@ -3,6 +3,12 @@ package dev.thingscompanion.app.widget
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
+import dev.thingscompanion.app.ui.deadlineText
+import dev.thingscompanion.cloud.ThingsDay
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -129,16 +135,28 @@ class ListWidget : GlanceAppWidget() {
                     .semantics { contentDescription = description }
                     .clickable(check),
             )
-            Text(
-                text = item.title,
-                maxLines = 2,
-                style = TextStyle(
-                    fontSize = 14.sp,
-                    color = if (ticked) colors.secondary else colors.text,
-                    textDecoration = if (ticked) TextDecoration.LineThrough else null,
-                ),
-                modifier = GlanceModifier.defaultWeight().padding(vertical = 6.dp).clickable(open),
-            )
+            Column(modifier = GlanceModifier.defaultWeight().padding(vertical = 6.dp).clickable(open)) {
+                Text(
+                    text = item.title,
+                    maxLines = 2,
+                    style = TextStyle(
+                        fontSize = 14.sp,
+                        color = if (ticked) colors.secondary else colors.text,
+                        textDecoration = if (ticked) TextDecoration.LineThrough else null,
+                    ),
+                )
+                // The reminder time and the deadline stand out under the title.
+                val reminder = item.reminderSeconds?.let { "🔔 " + LocalTime.ofSecondOfDay(it.toLong()).format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)) }
+                val deadline = item.deadlineDay?.let { "⚑ " + deadlineText(context, LocalDate.ofEpochDay(it), ThingsDay.today()) }
+                if (!ticked && (reminder != null || deadline != null)) {
+                    Row {
+                        reminder?.let {
+                            Text(it, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.accent), modifier = GlanceModifier.padding(end = 8.dp))
+                        }
+                        deadline?.let { Text(it, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.deadline)) }
+                    }
+                }
+            }
         }
     }
 

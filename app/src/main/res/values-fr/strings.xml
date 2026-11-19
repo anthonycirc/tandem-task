@@ -240,4 +240,15 @@
         <item quantity="one">%d ignoré</item>
         <item quantity="other">%d ignorés</item>
     </plurals>
+    <string name="deadline_today">Échéance aujourd’hui</string>
+    <plurals name="deadline_days_left">
+        <item quantity="one">%d j restant</item>
+        <item quantity="many">%d j restants</item>
+        <item quantity="other">%d j restants</item>
+    </plurals>
+    <plurals name="deadline_days_ago">
+        <item quantity="one">en retard de %d j</item>
+        <item quantity="many">en retard de %d j</item>
+        <item quantity="other">en retard de %d j</item>
+    </plurals>
 </resources>

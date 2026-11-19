@@ -15,9 +15,18 @@ data class WidgetSnapshot(
     val lists: Map<String, List<Item>>,
     val projects: List<Item>,
 ) {
-    /** [canToggle]: the widget may check it (see [ThingsLibrary.canComplete]); otherwise its circle opens it. */
+    /**
+     * [canToggle]: the widget may check it (see [ThingsLibrary.canComplete]); otherwise its circle opens it.
+     * [deadlineDay] (epoch day) and [reminderSeconds] (from midnight) are highlighted by the widget.
+     */
     @Serializable
-    data class Item(val id: String, val title: String, val canToggle: Boolean = true)
+    data class Item(
+        val id: String,
+        val title: String,
+        val canToggle: Boolean = true,
+        val deadlineDay: Long? = null,
+        val reminderSeconds: Int? = null,
+    )
 
     fun items(key: String): List<Item> = lists[key].orEmpty()
 
@@ -42,7 +51,9 @@ data class WidgetSnapshot(
         )
 
         fun from(library: ThingsLibrary, today: LocalDate, updatedAtMillis: Long): WidgetSnapshot {
-            fun List<Task>.items() = map { Item(it.id, it.title, canToggle = library.canComplete(it)) }
+            fun List<Task>.items() = map {
+                Item(it.id, it.title, canToggle = library.canComplete(it), deadlineDay = it.deadline?.toEpochDay(), reminderSeconds = it.reminder?.toSecondOfDay())
+            }
             val projects = library.projects()
             // Open to-dos only: a to-do checked from the widget leaves it.
             val lists = mapOf(
