@@ -68,9 +68,14 @@ data class UiState(
     /** The list tabs as arranged in Settings (names of [ListTab]); remembered across launches. */
     val tabOrder: List<String> = emptyList(),
     val hiddenTabs: Set<String> = emptySet(),
+    /** How the lists are reached, chosen in Settings; remembered across launches. */
+    val navLayout: NavLayout = NavLayout.TABS,
     /** Sample data for screenshots: no network, no writes, the real cache untouched. */
     val demo: Boolean = false,
 )
+
+/** How the lists are reached: tabs at the top, or a side menu sliding from the left as in Things and Todoist. */
+enum class NavLayout { TABS, DRAWER }
 
 /** App appearance: follow the system, or force light or dark. Remembered across launches. */
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
@@ -89,6 +94,8 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
                 ?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
             tabOrder = displayPrefs.getString(KEY_TAB_ORDER, null)?.split(',')?.filter { it.isNotBlank() }.orEmpty(),
             hiddenTabs = displayPrefs.getStringSet(KEY_HIDDEN_TABS, null).orEmpty().toSet(),
+            navLayout = displayPrefs.getString(KEY_NAV_LAYOUT, null)
+                ?.let { runCatching { NavLayout.valueOf(it) }.getOrNull() } ?: NavLayout.TABS,
         ),
     )
     val state: StateFlow<UiState> = _state
@@ -520,6 +527,11 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         _state.update { it.copy(themeMode = mode) }
     }
 
+    fun setNavLayout(layout: NavLayout) {
+        displayPrefs.edit().putString(KEY_NAV_LAYOUT, layout.name).apply()
+        _state.update { it.copy(navLayout = layout) }
+    }
+
     /** The tabs' new order and the hidden ones, from Settings. */
     fun setTabs(order: List<String>, hidden: Set<String>) {
         displayPrefs.edit().putString(KEY_TAB_ORDER, order.joinToString(",")).putStringSet(KEY_HIDDEN_TABS, hidden).apply()
@@ -558,6 +570,7 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         const val KEY_THEME = "theme"
         const val KEY_TAB_ORDER = "tab_order"
         const val KEY_HIDDEN_TABS = "hidden_tabs"
+        const val KEY_NAV_LAYOUT = "nav_layout"
     }
 
     private fun messageText(e: Exception): String {

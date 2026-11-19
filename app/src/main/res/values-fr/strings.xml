@@ -268,4 +268,8 @@
     <string name="lists_hint">Ordre des onglets et ceux qui s’affichent. Une liste masquée se retrouve par son nom dans la recherche.</string>
     <string name="move_up">Monter</string>
     <string name="move_down">Descendre</string>
+    <string name="navigation_title">Navigation</string>
+    <string name="navigation_tabs">Onglets en haut</string>
+    <string name="navigation_drawer">Menu latéral</string>
+    <string name="open_menu">Ouvrir le menu</string>
 </resources>

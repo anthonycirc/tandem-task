@@ -2,6 +2,12 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.6] - 2026-11-19
+
+### Added
+
+- **Choose the navigation.** Settings has a Navigation choice: tabs at the top (as before) or a side menu. The side menu opens from the menu button at the top left, as in Things and Todoist, and lists your lists in the order set under Lists. A swipe to the right on a row still means the Trash, so the menu only opens from its button.
+
 ## [0.4.5] - 2026-11-19
 
 ### Added

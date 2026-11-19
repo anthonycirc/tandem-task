@@ -88,6 +88,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -573,6 +579,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
         SettingsDialog(
             themeMode = state.themeMode,
             onThemeModeChange = viewModel::setThemeMode,
+            navLayout = state.navLayout,
+            onNavLayoutChange = viewModel::setNavLayout,
             tabOrder = ListLayout.order(ListTab.entries.map { it.name }, state.tabOrder),
             hiddenTabs = state.hiddenTabs,
             onTabsChange = viewModel::setTabs,
@@ -669,6 +677,17 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
         )
     }
 
+    val drawer = state.navLayout == NavLayout.DRAWER
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val drawerScope = rememberCoroutineScope()
+    fun openList(list: ListTab) {
+        taskId = null
+        projectId = null
+        areaId = null
+        tab = list
+    }
+    BackHandler(enabled = drawer && drawerState.isOpen) { drawerScope.launch { drawerState.close() } }
+    val screen = @Composable {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
@@ -771,6 +790,10 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                     if (projectId != null || areaId != null) {
                         IconButton(onClick = ::back) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                        }
+                    } else if (drawer) {
+                        IconButton(onClick = { drawerScope.launch { drawerState.open() } }) {
+                            Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.open_menu))
                         }
                     }
                 },
@@ -895,14 +918,16 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 })) {
                     // A hidden list opened from the search shows as a tab while it is open.
                     val tabs = if (tab in shownTabs) shownTabs else shownTabs + tab
-                    PrimaryScrollableTabRow(selectedTabIndex = tabs.indexOf(tab), edgePadding = 8.dp) {
-                        tabs.forEach { entry ->
-                            Tab(
-                                selected = tab == entry,
-                                onClick = { tab = entry },
-                                icon = { ListIcon(entry.kind, size = 20.dp) },
-                                text = { Text(stringResource(entry.label), maxLines = 1) },
-                            )
+                    if (!drawer) {
+                        PrimaryScrollableTabRow(selectedTabIndex = tabs.indexOf(tab), edgePadding = 8.dp) {
+                            tabs.forEach { entry ->
+                                Tab(
+                                    selected = tab == entry,
+                                    onClick = { tab = entry },
+                                    icon = { ListIcon(entry.kind, size = 20.dp) },
+                                    text = { Text(stringResource(entry.label), maxLines = 1) },
+                                )
+                            }
                         }
                     }
                     if (!filter.isEmpty && tab != ListTab.PROJECTS && tab != ListTab.TRASH) ActiveFilters(library, filter, viewModel::setFilter)
@@ -985,6 +1010,29 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 }
             }
         }
+    }
+    }
+    if (drawer) {
+        // The side menu: the lists in the order of Settings > Lists. Opened from the menu button only, so a
+        // swipe to the right on a row still means the Trash; a swipe to the left closes it.
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            gesturesEnabled = drawerState.isOpen,
+            drawerContent = {
+                ModalDrawerSheet {
+                    SideMenu(
+                        lists = if (tab in shownTabs) shownTabs else shownTabs + tab,
+                        current = tab.takeIf { projectId == null && areaId == null },
+                        onOpen = { list ->
+                            openList(list)
+                            drawerScope.launch { drawerState.close() }
+                        },
+                    )
+                }
+            },
+        ) { screen() }
+    } else {
+        screen()
     }
 
     // A to-do opens in a sheet sliding up over the list, as in Todoist; swiping it down or Back closes it.
@@ -2450,6 +2498,8 @@ private fun ActiveFilters(library: ThingsLibrary, filter: TaskFilter, onChange: 
 private fun SettingsDialog(
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
+    navLayout: NavLayout,
+    onNavLayoutChange: (NavLayout) -> Unit,
     tabOrder: List<String>,
     hiddenTabs: Set<String>,
     onTabsChange: (List<String>, Set<String>) -> Unit,
@@ -2496,6 +2546,23 @@ private fun SettingsDialog(
                                         },
                                     ),
                                 )
+                            },
+                        )
+                    }
+                }
+                HorizontalDivider()
+                // How the lists are reached.
+                Text(stringResource(R.string.navigation_title), style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    NavLayout.entries.forEach { layout ->
+                        FilterChip(
+                            selected = navLayout == layout,
+                            onClick = { onNavLayoutChange(layout) },
+                            label = {
+                                Text(stringResource(when (layout) {
+                                    NavLayout.TABS -> R.string.navigation_tabs
+                                    NavLayout.DRAWER -> R.string.navigation_drawer
+                                }))
                             },
                         )
                     }
@@ -2608,3 +2675,25 @@ private fun SelectionMark(picked: Boolean, modifier: Modifier = Modifier) {
 /** Text compared for search: lower case, without accents. */
 private fun foldForSearch(text: String): String =
     java.text.Normalizer.normalize(text.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "")
+
+/** The side menu's content: the app's name, then the lists, the open one highlighted. */
+@Composable
+private fun SideMenu(lists: List<ListTab>, current: ListTab?, onOpen: (ListTab) -> Unit) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
+        Text(
+            stringResource(R.string.app_name),
+            Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        lists.forEach { list ->
+            NavigationDrawerItem(
+                label = { Text(stringResource(list.label)) },
+                icon = { ListIcon(list.kind, size = 22.dp) },
+                selected = list == current,
+                onClick = { onOpen(list) },
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
+        }
+    }
+}
