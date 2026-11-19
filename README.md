@@ -34,6 +34,25 @@ Things has no Android app. Tandem Task brings your lists, notes and reminders to
 - **Background sync** every 30 minutes and when you come back to the app, so the widget stays current.
 - A design in the spirit of Things. Light, dark or system theme. English and French.
 
+## What works with Things
+
+Every change below is written to Things Cloud the way Things 3 writes it, so it shows on your Mac, iPhone and iPad.
+
+| Things | In Tandem Task |
+|---|---|
+| Inbox, Today, This Evening, Upcoming, Anytime, Someday, Trash | Read and write; to-dos closed today stay struck through, as in Things |
+| Deadlines list | Read; overdue first, then by deadline day; undated to-dos due today or earlier also show in Today |
+| To-dos | Create, edit title and notes, When, reminder, deadline, checklist, tags, move, complete, cancel, reopen, trash, restore, delete for good |
+| Projects | Create, edit, When and deadline, tags, move to an area, complete, cancel, reopen, delete; progress circle |
+| Headings | Create, rename, reorder, delete |
+| Areas | Create, rename, delete (its projects and to-dos go to the Trash with it, as in Things) |
+| Tags | Add or remove Things' tags on to-dos and projects, also when creating them |
+| Repeating to-dos | Make a to-do repeat (days, weeks, months, years; fixed or after completion), check it off, swipe an occurrence to another day or to the Trash |
+| Reminders | Ring on the phone as notifications |
+| Order | Drag to-dos, headings and projects, Today and This Evening included |
+| Quick Find | Search to-dos, projects, areas and lists |
+| Not yet | The Logbook, creating or renaming tags, changing or stopping a repeat rule, making a to-do with a deadline repeat |
+
 See the [changelog](CHANGELOG.md) for what changed in each version.
 
 ## Screenshots
