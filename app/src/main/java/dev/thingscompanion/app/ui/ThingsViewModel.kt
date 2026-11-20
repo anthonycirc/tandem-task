@@ -15,6 +15,7 @@ import dev.thingscompanion.app.data.writeWidgetSnapshot
 import dev.thingscompanion.cloud.DemoData
 import dev.thingscompanion.cloud.PendingChange
 import dev.thingscompanion.cloud.RepeatRule
+import dev.thingscompanion.cloud.Sharing
 import dev.thingscompanion.cloud.TaskStatus
 import dev.thingscompanion.cloud.Schedule
 import dev.thingscompanion.cloud.TaskFilter
@@ -62,6 +63,8 @@ data class UiState(
     /** Requests from a widget tap, consumed by the screen. */
     val launchOpenAdd: Boolean = false,
     val launchTaskId: String? = null,
+    /** Text another app shared, to add as a new to-do. */
+    val launchShare: Sharing.Draft? = null,
     /** Display filter; the show-completed choice is remembered across launches. */
     val filter: TaskFilter = TaskFilter(),
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
@@ -517,10 +520,10 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         if (_state.value.pending > 0 && !_state.value.demo) BackgroundSync.sendSoon(getApplication())
     }
 
-    fun handleLaunch(openAdd: Boolean, taskId: String?) =
-        _state.update { it.copy(launchOpenAdd = openAdd, launchTaskId = taskId) }
+    fun handleLaunch(openAdd: Boolean, taskId: String?, share: Sharing.Draft? = null) =
+        _state.update { it.copy(launchOpenAdd = openAdd, launchTaskId = taskId, launchShare = share) }
 
-    fun consumeLaunch() = _state.update { it.copy(launchOpenAdd = false, launchTaskId = null) }
+    fun consumeLaunch() = _state.update { it.copy(launchOpenAdd = false, launchTaskId = null, launchShare = null) }
 
     fun setThemeMode(mode: ThemeMode) {
         displayPrefs.edit().putString(KEY_THEME, mode.name).apply()

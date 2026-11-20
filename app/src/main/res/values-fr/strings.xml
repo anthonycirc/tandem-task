@@ -129,6 +129,7 @@
     <string name="cancel_project">Annuler le projet</string>
     <string name="reopen_project">Rouvrir le projet</string>
     <string name="more">Plus</string>
+    <string name="share">Partager</string>
     <string name="project_completed">Projet terminé</string>
     <string name="project_cancelled">Projet annulé</string>
     <string name="project_reopened">Projet rouvert</string>

@@ -130,6 +130,7 @@
     <string name="cancel_project">Cancel project</string>
     <string name="reopen_project">Reopen project</string>
     <string name="more">More</string>
+    <string name="share">Share</string>
     <string name="project_completed">Project completed</string>
     <string name="project_cancelled">Project cancelled</string>
     <string name="project_reopened">Project reopened</string>

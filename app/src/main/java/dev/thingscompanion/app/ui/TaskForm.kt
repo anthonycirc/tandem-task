@@ -304,6 +304,8 @@ fun TaskFormScreen(
                             colors = TextFieldDefaults.colors(
                                 focusedContainerColor = Color.Transparent,
                                 unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
                             ),
                             modifier = Modifier.weight(1f).focusRequester(rowFocus),
                         )

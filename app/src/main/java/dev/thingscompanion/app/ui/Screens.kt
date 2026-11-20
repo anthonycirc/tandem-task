@@ -46,6 +46,9 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
+import android.content.Intent
+import dev.thingscompanion.cloud.Sharing
 import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
@@ -299,10 +302,15 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     // Tags picked for a new to-do or project, sent with its creation.
     var newTagIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var pickingTags by remember { mutableStateOf(false) }
-    fun startAdding() {
+    // Title and notes a new to-do starts with: what another app shared, or nothing.
+    var addTitle by rememberSaveable { mutableStateOf("") }
+    var addNotes by rememberSaveable { mutableStateOf("") }
+    fun startAdding(shared: Sharing.Draft? = null) {
         placeProjectId = projectId?.takeIf { library?.task(it) != null }
         placeAreaId = areaId?.takeIf { placeProjectId == null && library?.area(it) != null }
         newTagIds = emptyList()
+        addTitle = shared?.title.orEmpty()
+        addNotes = shared?.notes.orEmpty()
         adding = true
     }
     @Composable
@@ -321,11 +329,12 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     }
     val newTagTitles = newTagIds.mapNotNull { id -> library?.tags()?.firstOrNull { it.id == id }?.title }
 
-    // A widget tap asked to open the add form or a to-do.
-    LaunchedEffect(state.launchOpenAdd, state.launchTaskId) {
-        if (state.launchOpenAdd) startAdding()
+    // A widget tap asked to open the add form or a to-do; another app shared text to add.
+    LaunchedEffect(state.launchOpenAdd, state.launchTaskId, state.launchShare) {
+        val shared = state.launchShare
+        if (state.launchOpenAdd || shared != null) startAdding(shared)
         if (state.launchTaskId != null) taskId = state.launchTaskId
-        if (state.launchOpenAdd || state.launchTaskId != null) viewModel.consumeLaunch()
+        if (state.launchOpenAdd || state.launchTaskId != null || shared != null) viewModel.consumeLaunch()
     }
 
     // The forms take the whole screen: Save stays in the top bar, above the keyboard.
@@ -355,6 +364,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
         }
         TaskFormScreen(
             initial = TaskDraft(
+                title = addTitle,
+                notes = addNotes,
                 schedule = when {
                     filed -> Schedule.Anytime
                     tab == ListTab.TODAY -> Schedule.Today(ThingsDay.today())
@@ -1136,6 +1147,20 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                         viewModel.trash(openTask.id)
                     }) {
                         Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.move_to_trash))
+                    }
+                }
+                if (openTask.type == TaskType.TODO) {
+                    val context = LocalContext.current
+                    val chooserTitle = stringResource(R.string.share)
+                    IconButton(onClick = {
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, openTask.title)
+                            putExtra(Intent.EXTRA_TEXT, Sharing.text(openTask.title, openTask.notes, library.checklist(openTask.id)))
+                        }
+                        context.startActivity(Intent.createChooser(send, chooserTitle))
+                    }) {
+                        Icon(Icons.Filled.Share, contentDescription = chooserTitle)
                     }
                 }
             }
@@ -2320,6 +2345,8 @@ private fun TaskDetail(
                             colors = androidx.compose.material3.TextFieldDefaults.colors(
                                 focusedContainerColor = Color.Transparent,
                                 unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
                             ),
                             modifier = Modifier.weight(1f),
                         )

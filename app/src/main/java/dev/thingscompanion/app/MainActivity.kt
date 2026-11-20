@@ -21,6 +21,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.thingscompanion.app.ui.ThemeMode
 import dev.thingscompanion.app.ui.ThingsApp
 import dev.thingscompanion.app.ui.ThingsViewModel
+import dev.thingscompanion.cloud.Sharing
 
 class MainActivity : ComponentActivity() {
     private val viewModel: ThingsViewModel by viewModels()
@@ -70,16 +71,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Widget taps: open the Inbox form, or a to-do's detail. */
+    /** Widget taps: open the Inbox form, or a to-do's detail. Text shared by another app: the form, filled in. */
     private fun handleLaunch(intent: Intent?) {
         intent ?: return
         // Demo mode for screenshots, from adb (am start ... --ez demo true) on a development build only:
         // another app can't switch a published build into it.
         val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         if (debuggable && intent.getBooleanExtra(EXTRA_DEMO, false)) viewModel.enterDemo()
+        val share = if (intent.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
+            Sharing.draft(intent.getStringExtra(Intent.EXTRA_SUBJECT), intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString())
+        } else null
         viewModel.handleLaunch(
             openAdd = intent.getBooleanExtra(EXTRA_OPEN_ADD, false),
             taskId = intent.getStringExtra(EXTRA_TASK_ID),
+            share = share,
         )
     }
 

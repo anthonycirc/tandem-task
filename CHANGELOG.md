@@ -2,6 +2,17 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.2] - 2026-11-20
+
+### Added
+
+- **Share to Tandem Task.** From any app, Share → Tandem Task opens a new to-do filled in with what was shared: a page's title with its link in the notes, or the text's first line with the rest in the notes.
+- **Share a to-do.** The share button in a to-do's sheet sends its title, notes and checklist as text to another app.
+
+### Changed
+
+- The checklist's fields no longer draw a line under them: in a to-do's sheet, it ran right above the line that sets off the details.
+
 ## [0.5.1] - 2026-11-19
 
 ### Added

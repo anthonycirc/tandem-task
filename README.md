@@ -28,6 +28,7 @@ Things has no Android app. Tandem Task brings your lists, notes and reminders to
 - **Markdown in notes**: bold, italic, strikethrough, code, headings, lists and links, styled while you read and while you type.
 - **To-do details**: a tap slides the to-do up in a sheet; tap its When, project or tags to change them. A long press on a checkbox cancels the to-do, as in Things.
 - **Checklists**: check items from the to-do, add, rename or delete them.
+- **Sharing**: share a link or some text from any app to Tandem Task, and it opens a new to-do filled in with it (the page's title, the link in the notes). Share a to-do from its sheet as text: title, notes and checklist.
 - **Trash**: move to-dos to the Trash, restore them, or delete them for good (one at a time or Empty Trash), after a confirmation.
 - **Reminders on Android**: reminders set on any device ring on your phone as notifications, on time.
 - **Home-screen widget**: any list or project. Tap a circle to check a to-do off (it stays ticked for 3 seconds, so a second tap takes a mistake back), or **+** to add one. Reminders and deadlines stand out under each title. The ⋯ button changes the list, the theme (light, dark or system), the background color (a preset, or any colour by red, green and blue or hex) and its opacity.
