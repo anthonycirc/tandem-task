@@ -23,8 +23,8 @@ class NotesAndDaysTest {
     }
 
     @Test
-    fun `structured notes of type 2 join paragraphs`() {
-        val notes = Json.parseToJsonElement("""{"_t": "tx", "t": 2, "ps": [{"r": "first"}, {"r": "second"}]}""")
+    fun `a type 2 note alone is its edits made on an empty note`() {
+        val notes = Json.parseToJsonElement("""{"_t": "tx", "t": 2, "ps": [{"r": "first", "p": 0, "l": 0}, {"r": "\nsecond", "p": 5, "l": 0}]}""")
         assertEquals("first\nsecond", Notes.toPlainText(notes))
     }
 

@@ -2,6 +2,18 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.3] - 2026-11-21
+
+### Added
+
+- **Logbook.** A new list shows what was completed or cancelled, latest first and grouped by the day it was closed, as Things' Logbook does for the weekly review. It is added after Projects; Settings can move or hide it.
+- **Change a deadline in place.** Tapping the deadline in a to-do's details, or in a project's header, opens the calendar to change it, or remove it with No deadline, without opening the form. Undo puts the old one back.
+- **Obsidian links in notes.** An `obsidian://` link in a note, bare or as `[label](obsidian://…)`, is now a link: a tap opens the note in Obsidian. Without Obsidian on the phone, a short message says no app opens it.
+
+### Fixed
+
+- **Notes edited in Things showed only their last change.** Things sends an edited note as the changes made to it, and the app took the last change for the whole note: the rest of the text, links included, went missing. Notes are now rebuilt from those changes. After the update, the app downloads your Things history again once, to repair the notes already on the phone.
+
 ## [0.5.2] - 2026-11-20
 
 ### Added

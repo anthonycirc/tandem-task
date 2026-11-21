@@ -373,6 +373,17 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
+    /** A deadline changed or removed from the details, without the form; Undo puts the old one back. */
+    fun setDeadline(id: String, deadline: LocalDate?) {
+        val task = _state.value.library?.task(id) ?: return
+        if (deadline == task.deadline) return
+        change(
+            PendingChange.SetDeadline(newId(), id, deadline?.toEpochDay()),
+            done = R.string.saved,
+            undo = PendingChange.SetDeadline(newId(), id, task.deadline?.toEpochDay()),
+        )
+    }
+
     fun setChecklistItemDone(itemId: String, done: Boolean) = change(PendingChange.SetChecklistItemDone(newId(), itemId, done))
 
     fun deleteChecklistItem(itemId: String) = change(PendingChange.DeleteChecklistItem(newId(), itemId))

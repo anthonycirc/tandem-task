@@ -84,6 +84,8 @@
     <string name="app_theme">Thème de l\'app</string>
     <string name="demo_no_writes">Mode démo : rien n\'est envoyé à Things.</string>
     <string name="exit_demo">Quitter la démo</string>
+    <string name="list_logbook">Journal</string>
+    <string name="logbook_empty">Rien de terminé pour l’instant.</string>
     <string name="list_trash">Corbeille</string>
     <string name="trash_empty">La corbeille est vide.</string>
     <string name="in_trash">Cette tâche est dans la corbeille.</string>
@@ -97,6 +99,7 @@
     <string name="new_checklist_item">Nouvel élément</string>
     <string name="delete_item">Supprimer l\'élément</string>
     <string name="tomorrow">Demain</string>
+    <string name="yesterday">Hier</string>
     <string name="pending_count">%1$d à envoyer</string>
     <string name="pending_explained">%1$d modification(s) faite(s) sur ce téléphone attendent d\'être envoyées à Things. Elles partent dès que le réseau le permet.</string>
     <string name="change_refused">Things a refusé une modification, elle a été abandonnée : %1$s</string>
@@ -124,6 +127,7 @@
     <string name="deadline">Échéance</string>
     <string name="add_deadline">Ajouter une échéance</string>
     <string name="no_deadline">Sans échéance</string>
+    <string name="link_no_app">Aucune app de ce téléphone n’ouvre ce lien.</string>
     <string name="edit_project_title">Modifier le projet</string>
     <string name="complete_project">Terminer le projet</string>
     <string name="cancel_project">Annuler le projet</string>

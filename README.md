@@ -14,7 +14,7 @@ Things has no Android app. Tandem Task brings your lists, notes and reminders to
 
 ## Features
 
-- **Your lists**: Today (with This Evening and what is due), Inbox, Upcoming (grouped by day, deadlines included), Deadlines (overdue first, then by day), Anytime, Someday, Projects (grouped by area, each area folding open or closed) and Trash, with notes, checklists, tags, deadlines and repeat rules. Projects show their to-dos under their headings.
+- **Your lists**: Today (with This Evening and what is due), Inbox, Upcoming (grouped by day, deadlines included), Deadlines (overdue first, then by day), Anytime, Someday, Projects (grouped by area, each area folding open or closed), Logbook (what you completed or cancelled, by day, for your review) and Trash, with notes, checklists, tags, deadlines and repeat rules. Projects show their to-dos under their headings.
 - **Search**: pull a list down, or tap the magnifier, to find to-dos, projects and areas by title or notes, and lists by name.
 - **Navigation, your way**: tabs at the top, a side menu with your lists, areas and projects (as Things' sidebar), or a bar at the bottom, chosen in Settings. Counts show next to the Inbox, Today and overdue deadlines.
 - **Your lists, your order**: in Settings, reorder the lists and hide the ones you don't use; hidden lists stay one search away.
@@ -23,9 +23,9 @@ Things has no Android app. Tandem Task brings your lists, notes and reminders to
 - **Select several**: pick to-dos or projects, then reschedule, move, check off or trash them at once.
 - **Tags**: tag to-dos and projects with your Things tags, also right when you create them.
 - **Drag to reorder**: long-press a to-do, a heading or a project and drag it, also into This Evening, under another heading or into another area.
-- **Add and edit to-dos**: title (with an emoji in front if you like), notes, checklist items, when, reminder and deadline, the project or area right when you add it, and move them to the Inbox, a project, a heading or an area. Make a dated to-do repeat every N days, weeks, months or years, on a fixed schedule (weekly on chosen days; monthly or yearly on its day, its weekday's rank or the last day) or after completion, and check such to-dos off the way Things does it, so the next one comes on the right day; other repeats stay protected the way Things expects.
+- **Add and edit to-dos**: title (with an emoji in front if you like), notes, checklist items, when, reminder and deadline (tap a deadline in the details to change or remove it without the form), the project or area right when you add it, and move them to the Inbox, a project, a heading or an area. Make a dated to-do repeat every N days, weeks, months or years, on a fixed schedule (weekly on chosen days; monthly or yearly on its day, its weekday's rank or the last day) or after completion, and check such to-dos off the way Things does it, so the next one comes on the right day; other repeats stay protected the way Things expects.
 - **Projects and areas**: each project's circle fills as its to-dos get done. Tap **+** to add a to-do, or long-press it for a heading. Create projects (with when and deadline), headings and areas; rename, complete, cancel, reopen, move and delete them. Completing a project completes its open to-dos, as in Things.
-- **Markdown in notes**: bold, italic, strikethrough, code, headings, lists and links, styled while you read and while you type.
+- **Markdown in notes**: bold, italic, strikethrough, code, headings, lists and links (web links, and `obsidian://` links that open the note in Obsidian), styled while you read and while you type.
 - **To-do details**: a tap slides the to-do up in a sheet; tap its When, project or tags to change them. A long press on a checkbox cancels the to-do, as in Things.
 - **Checklists**: check items from the to-do, add, rename or delete them.
 - **Sharing**: share a link or some text from any app to Tandem Task, and it opens a new to-do filled in with it (the page's title, the link in the notes). Share a to-do from its sheet as text: title, notes and checklist.

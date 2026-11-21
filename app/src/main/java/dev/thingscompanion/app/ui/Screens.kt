@@ -47,7 +47,13 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import dev.thingscompanion.cloud.Sharing
 import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.semantics.semantics
@@ -183,6 +189,8 @@ enum class ListTab(@StringRes val label: Int, val kind: ListKind) {
     SOMEDAY(R.string.list_someday, ListKind.SOMEDAY),
     // Projects and areas in one list: each area folds open or closed over its projects.
     PROJECTS(R.string.list_projects, ListKind.PROJECT),
+    // Things' Logbook: what was completed or cancelled, by the day it was closed, for the review.
+    LOGBOOK(R.string.list_logbook, ListKind.LOGBOOK),
     TRASH(R.string.list_trash, ListKind.TRASH),
 }
 
@@ -277,6 +285,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     var areaId by rememberSaveable { mutableStateOf<String?>(null) }
     var taskId by rememberSaveable { mutableStateOf<String?>(null) }
     var schedulingId by rememberSaveable { mutableStateOf<String?>(null) }
+    // A deadline tapped in the details or a project's header: changed there, without the form.
+    var deadlineId by rememberSaveable { mutableStateOf<String?>(null) }
     var addMenu by remember { mutableStateOf(false) }
     var addingProject by rememberSaveable { mutableStateOf(false) }
     var naming by remember { mutableStateOf<NameRequest?>(null) }
@@ -440,6 +450,22 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 if (moving.type == TaskType.PROJECT) viewModel.moveProject(moving.id, destination.areaId) else viewModel.moveTask(moving.id, destination)
             },
             onDismiss = { movingId = null },
+        )
+    }
+    val deadlineOf = deadlineId?.let { library?.task(it) }
+    if (deadlineOf != null) {
+        DayPickerDialog(
+            today = ThingsDay.today(),
+            initial = deadlineOf.deadline,
+            onPicked = { day ->
+                deadlineId = null
+                viewModel.setDeadline(deadlineOf.id, day)
+            },
+            onDismiss = { deadlineId = null },
+            onClear = stringResource(R.string.no_deadline) to {
+                deadlineId = null
+                viewModel.setDeadline(deadlineOf.id, null)
+            },
         )
     }
     val tagging = taggingId?.let { library?.task(it) }
@@ -758,7 +784,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
             }
         },
         floatingActionButton = {
-            if (library != null && taskId == null && tab != ListTab.TRASH && selection == null) {
+            if (library != null && taskId == null && tab != ListTab.TRASH && tab != ListTab.LOGBOOK && selection == null) {
                 // In a project, an area or Projects, + offers what can be created there, as in Things.
                 val choices = buildList {
                     val project = projectId?.let { library.task(it) }
@@ -923,6 +949,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                                 onStatus = { viewModel.setProjectStatus(openProject.id, it) },
                                 onTags = { taggingId = openProject.id },
                                 onReschedule = { schedulingId = openProject.id },
+                                onDeadline = { deadlineId = openProject.id },
                             )
                         },
                         // Things' headings; with a filter on, headings left empty are hidden.
@@ -997,7 +1024,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             }
                         }
                     }
-                    if (!filter.isEmpty && tab != ListTab.PROJECTS && tab != ListTab.TRASH) ActiveFilters(library, filter, viewModel::setFilter)
+                    if (!filter.isEmpty && tab != ListTab.PROJECTS && tab != ListTab.TRASH && tab != ListTab.LOGBOOK) ActiveFilters(library, filter, viewModel::setFilter)
                     val title = stringResource(tab.label)
                     when (tab) {
                         ListTab.PROJECTS -> ProjectList(
@@ -1027,6 +1054,16 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             },
                             groups = listOf(Group.None to library.trash()),
                             emptyText = stringResource(R.string.trash_empty),
+                            actions = rowActions,
+                        )
+                        // Filters leave it whole: they hide what is closed, which is all it holds.
+                        ListTab.LOGBOOK -> TaskList(
+                            library = library,
+                            header = { ListHeader(tab.kind, title) },
+                            groups = library.logbook()
+                                .groupBy { it.stopDate!!.atZone(java.time.ZoneId.systemDefault()).toLocalDate() }
+                                .map { (day, items) -> Group.Day(day) to items },
+                            emptyText = stringResource(R.string.logbook_empty),
                             actions = rowActions,
                         )
                         else -> {
@@ -1175,6 +1212,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 onDeleteForever = { deletingForever = listOf(it) },
                 onTags = { taggingId = it },
                 onReschedule = { schedulingId = it },
+                onDeadline = { deadlineId = it },
                 onMove = { movingId = it },
                 onSetCancelled = viewModel::setCancelled,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
@@ -1633,9 +1671,11 @@ private fun dayLabel(date: LocalDate): String {
     val today = ThingsDay.today()
     return when (date) {
         today.plusDays(1) -> stringResource(R.string.tomorrow)
+        today.minusDays(1) -> stringResource(R.string.yesterday)
         else -> {
             val weekday = date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
-            if (date.isBefore(today.plusDays(7))) weekday else "$weekday · ${date.format(DateTimeFormatter.ofPattern("MMM yyyy"))}"
+            // Within a week either way the weekday is enough; further off, the Logbook's past days too, the month says which.
+            if (date.isBefore(today.plusDays(7)) && date.isAfter(today.minusDays(7))) weekday else "$weekday · ${date.format(DateTimeFormatter.ofPattern("MMM yyyy"))}"
         }
     }.replaceFirstChar { it.titlecase() }
 }
@@ -2095,6 +2135,7 @@ private fun ProjectHeader(
     onStatus: (TaskStatus) -> Unit,
     onTags: () -> Unit = {},
     onReschedule: () -> Unit = {},
+    onDeadline: () -> Unit = {},
 ) {
     val editable = library.canEditProject(project)
     var confirming by remember { mutableStateOf<TaskStatus?>(null) }
@@ -2201,7 +2242,12 @@ private fun ProjectHeader(
                 Text(area ?: stringResource(R.string.no_area), style = small, color = muted)
             }
             project.deadline?.let {
-                Row(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.clip(MaterialTheme.shapes.small)
+                        .clickable(enabled = editable && project.isOpen, onClickLabel = stringResource(R.string.deadline), onClick = onDeadline)
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     DeadlineFlag()
                     Spacer(Modifier.width(4.dp))
                     Text(it.format(dateFormat), style = small, color = ListColors.deadline)
@@ -2247,6 +2293,7 @@ private fun TaskDetail(
     onDeleteForever: (String) -> Unit,
     onTags: (String) -> Unit = {},
     onReschedule: (String) -> Unit = {},
+    onDeadline: (String) -> Unit = {},
     onMove: (String) -> Unit = {},
     onSetCancelled: (String, Boolean) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier.fillMaxSize(),
@@ -2293,7 +2340,23 @@ private fun TaskDetail(
                     Text(stringResource(R.string.no_notes), style = MaterialTheme.typography.bodyLarge, color = muted)
                 } else {
                     val colors = markdownColors()
-                    Text(remember(notes, colors) { markdown(notes, colors, clickableLinks = true) }, style = MaterialTheme.typography.bodyLarge)
+                    // An Obsidian link needs the app: without it, a short message instead of a crash.
+                    val context = LocalContext.current
+                    val noApp = stringResource(R.string.link_no_app)
+                    val links = remember(context, noApp) {
+                        object : UriHandler {
+                            override fun openUri(uri: String) {
+                                try {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)))
+                                } catch (_: ActivityNotFoundException) {
+                                    Toast.makeText(context, noApp, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
+                    CompositionLocalProvider(LocalUriHandler provides links) {
+                        Text(remember(notes, colors) { markdown(notes, colors, clickableLinks = true) }, style = MaterialTheme.typography.bodyLarge)
+                    }
                 }
             }
         }
@@ -2361,6 +2424,7 @@ private fun TaskDetail(
             task,
             onTags = { onTags(task.id) }.takeIf { library.canTag(task) },
             onWhen = { onReschedule(task.id) }.takeIf { library.canReschedule(task) && task.isOpen },
+            onDeadline = { onDeadline(task.id) }.takeIf { library.canSetDeadline(task) && task.isOpen },
             onPlace = { onMove(task.id) }.takeIf { library.canMove(task) },
         )
     }
@@ -2382,8 +2446,8 @@ private fun whenFact(task: Task): Pair<ListKind, String> {
 }
 
 /**
- * When, reminder, deadline, place and tags, each with its icon. When, place and tags open their
- * picker on a tap, when the item can take the change.
+ * When, reminder, deadline, place and tags, each with its icon. When, deadline, place and tags open
+ * their picker on a tap, when the item can take the change.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -2392,6 +2456,7 @@ private fun DetailFacts(
     task: Task,
     onTags: (() -> Unit)? = null,
     onWhen: (() -> Unit)? = null,
+    onDeadline: (() -> Unit)? = null,
     onPlace: (() -> Unit)? = null,
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -2402,7 +2467,15 @@ private fun DetailFacts(
         library.repeatRule(task)?.let { rule ->
             Fact({ RepeatGlyph(muted, size = 18.dp) }, describeRepeat(LocalContext.current, rule))
         }
-        task.deadline?.let { Fact({ DeadlineFlag(size = 16.dp) }, stringResource(R.string.due_date, it.format(dateFormat)), ListColors.deadline) }
+        task.deadline?.let {
+            Fact(
+                { DeadlineFlag(size = 16.dp) },
+                stringResource(R.string.due_date, it.format(dateFormat)),
+                ListColors.deadline,
+                onClick = onDeadline,
+                clickLabel = stringResource(R.string.deadline),
+            )
+        }
         val project = task.projectId?.let { library.task(it) }
         val place = project?.title ?: task.areaId?.let { library.area(it)?.title }
         if (place != null || onPlace != null) {

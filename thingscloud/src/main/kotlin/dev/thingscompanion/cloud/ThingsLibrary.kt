@@ -126,6 +126,14 @@ class ThingsLibrary private constructor(
         .filter { it.trashed && it.isCurrentEntity && it.title.isNotBlank() }
         .sortedByDescending { it.modifiedAt ?: 0.0 }
 
+    /** Things' Logbook: completed and cancelled to-dos and projects, most recently closed first. */
+    fun logbook(): List<Task> = tasks.values
+        .filter {
+            !it.isOpen && it.type != TaskType.HEADING && !it.isRecurrenceTemplate && !it.trashed && !it.inTrashedContainer &&
+                it.isCurrentEntity && it.title.isNotBlank()
+        }
+        .sortedWith(compareByDescending<Task> { it.stopDate }.thenBy { it.id })
+
     /** How a repeating to-do repeats: its own rule for a template, its template's for an instance. */
     fun repeatRule(task: Task): RepeatRule? {
         val template = if (task.repeatRuleJson != null) task else task.recurrenceTemplateIds.singleOrNull()?.let(tasks::get)

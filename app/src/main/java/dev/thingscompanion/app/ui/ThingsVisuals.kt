@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Star
@@ -46,6 +47,7 @@ object ListColors {
     val someday = Color(0xFFC9A66B)
     val project = Color(0xFF3D8BF2)
     val trash = Color(0xFF8E8E93)
+    val logbook = Color(0xFF4CAF50)
     val evening = Color(0xFF6E8FD8)
     val deadline = Color(0xFFE5484D)
     val checked = Color(0xFF3D8BF2)
@@ -53,7 +55,7 @@ object ListColors {
     val area = Color(0xFF3FA99A)
 }
 
-enum class ListKind { INBOX, TODAY, UPCOMING, DEADLINES, ANYTIME, SOMEDAY, PROJECT, AREA, TRASH, EVENING }
+enum class ListKind { INBOX, TODAY, UPCOMING, DEADLINES, ANYTIME, SOMEDAY, PROJECT, AREA, LOGBOOK, TRASH, EVENING }
 
 /** The icon of a list, drawn in its colour; a project's circle fills with its [progress], 0 to 1. */
 @Composable
@@ -63,6 +65,7 @@ fun ListIcon(kind: ListKind, modifier: Modifier = Modifier, size: Dp = 22.dp, pr
         ListKind.DEADLINES -> DeadlineFlag(modifier, size = size)
         ListKind.UPCOMING -> Icon(Icons.Filled.DateRange, null, modifier.size(size), tint = ListColors.upcoming)
         ListKind.TRASH -> Icon(Icons.Filled.Delete, null, modifier.size(size), tint = ListColors.trash)
+        ListKind.LOGBOOK -> Icon(Icons.Filled.CheckCircle, null, modifier.size(size), tint = ListColors.logbook)
         else -> Canvas(modifier.size(size)) {
             val w = this.size.width
             val stroke = Stroke(width = w * 0.09f, cap = StrokeCap.Round, join = StrokeJoin.Round)

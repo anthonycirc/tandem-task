@@ -151,8 +151,15 @@ class ThingsRepository(context: Context) {
  * of the time of every tap. Callers get a copy, so they may change it freely.
  */
 private class FileHistoryCache(context: Context) : HistoryCache {
-    private val stateFile = File(context.filesDir, "history_state.json")
-    private val indexFile = File(context.filesDir, "history_index")
+    // v2: notes edited in Things are rebuilt from their patches. The first files kept only the last
+    // patch, the text it applied to lost, so they are dropped and the history pulled again once.
+    private val stateFile = File(context.filesDir, "history_state_v2.json")
+    private val indexFile = File(context.filesDir, "history_index_v2")
+
+    init {
+        File(context.filesDir, "history_state.json").delete()
+        File(context.filesDir, "history_index").delete()
+    }
     private val snapshotFile = widgetSnapshotFile(context)
 
     fun exists(): Boolean = memory != null || (stateFile.exists() && indexFile.exists())

@@ -30,7 +30,7 @@ fun markdownColors() = MarkdownColors(
 
 /**
  * [text] with Things' Markdown styled in place, markers kept. With [clickableLinks], links open
- * in the browser (the detail view); in a text field they are only coloured.
+ * in the browser, or Obsidian for its notes (the detail view); in a text field they are only coloured.
  */
 fun markdown(text: String, colors: MarkdownColors, clickableLinks: Boolean): AnnotatedString = buildAnnotatedString {
     append(text)

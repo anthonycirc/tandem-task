@@ -443,13 +443,24 @@ private enum class WhenChoice(@StringRes val label: Int, val hasDay: Boolean, va
     }
 }
 
-/** Calendar returning the picked calendar day; limited to today and later unless [futureOnly] is false. */
+/**
+ * Calendar returning the picked calendar day; limited to today and later unless [futureOnly] is false.
+ * It opens on [initial] when that day can be picked, and [onClear] adds a button taking the date off.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DayPickerDialog(today: LocalDate, onPicked: (LocalDate) -> Unit, onDismiss: () -> Unit, futureOnly: Boolean = true) {
+fun DayPickerDialog(
+    today: LocalDate,
+    onPicked: (LocalDate) -> Unit,
+    onDismiss: () -> Unit,
+    futureOnly: Boolean = true,
+    initial: LocalDate? = null,
+    onClear: Pair<String, () -> Unit>? = null,
+) {
     val todayUtcMillis = today.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+    val initialMillis = initial?.takeIf { !futureOnly || !it.isBefore(today) }?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
     val state = rememberDatePickerState(
-        initialSelectedDateMillis = if (futureOnly) todayUtcMillis + 86_400_000L else todayUtcMillis,
+        initialSelectedDateMillis = initialMillis ?: if (futureOnly) todayUtcMillis + 86_400_000L else todayUtcMillis,
         selectableDates = object : SelectableDates {
             override fun isSelectableDate(utcTimeMillis: Long) = !futureOnly || utcTimeMillis >= todayUtcMillis
         },
@@ -464,7 +475,12 @@ fun DayPickerDialog(today: LocalDate, onPicked: (LocalDate) -> Unit, onDismiss: 
                 enabled = state.selectedDateMillis != null,
             ) { Text(stringResource(R.string.ok)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        dismissButton = {
+            Row {
+                onClear?.let { (label, clear) -> TextButton(onClick = clear) { Text(label) } }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            }
+        },
     ) {
         DatePicker(state = state)
     }

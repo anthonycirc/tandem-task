@@ -44,19 +44,25 @@ class HistoryState(initial: Map<String, StoredObject> = emptyMap()) {
     fun apply(changes: List<WireChange>) {
         for (change in changes) {
             when (change.operation) {
-                Operation.CREATE -> _objects[change.uuid] = StoredObject(change.entity, change.props)
+                Operation.CREATE -> _objects[change.uuid] = StoredObject(change.entity, withNotes(null, change.props))
                 Operation.UPDATE -> {
                     val existing = _objects[change.uuid]
                     _objects[change.uuid] = if (existing == null) {
-                        StoredObject(change.entity, change.props)
+                        StoredObject(change.entity, withNotes(null, change.props))
                     } else {
-                        StoredObject(change.entity ?: existing.entity, existing.props + change.props)
+                        StoredObject(change.entity ?: existing.entity, existing.props + withNotes(existing.props["nt"], change.props))
                     }
                 }
                 Operation.DELETE -> _objects.remove(change.uuid)
                 Operation.UNKNOWN -> Unit
             }
         }
+    }
+
+    /** [props] with a note given as edits (type 2) turned into the whole edited note. */
+    private fun withNotes(before: JsonElement?, props: JsonObject): Map<String, JsonElement> {
+        val notes = props["nt"] ?: return props
+        return props + ("nt" to Notes.merge(before, notes))
     }
 
     fun toJson(): String = Json.encodeToString(

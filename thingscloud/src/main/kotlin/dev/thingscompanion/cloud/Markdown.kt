@@ -14,8 +14,10 @@ object Markdown {
     private val HEADING = Regex("""^(#{1,6} +)(.+)$""")
     private val BULLET = Regex("""^\s*([-*+]|\d+\.) +""")
     private val CODE = Regex("""`([^`\n]+)`""")
-    private val LINK = Regex("""\[([^\]\n]+)]\((https?://[^)\s]+)\)""")
-    private val BARE_URL = Regex("""https?://[^\s<>()\[\]]*[^\s<>()\[\].,;:!?'"]""")
+    // Web links, and Obsidian's, which open a note in the vault; other app schemes stay plain text.
+    private const val SCHEME = """(?:https?|obsidian)://"""
+    private val LINK = Regex("""\[([^\]\n]+)]\(($SCHEME[^)\s]+)\)""")
+    private val BARE_URL = Regex("""$SCHEME[^\s<>()\[\]]*[^\s<>()\[\].,;:!?'"]""")
 
     /** Delimited styles; `_` only around whole words, so snake_case names stay plain. */
     private val PAIRS = listOf(

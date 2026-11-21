@@ -34,6 +34,19 @@ class MarkdownTest {
     }
 
     @Test
+    fun `obsidian links open the note, bare or with a label`() {
+        val bare = "obsidian://open?vault=Circonflex&file=Bear%2FNotes%2FDEV-19%20Tri"
+        val text = "Doc (FR) : $bare\nAussi [la note](obsidian://open?vault=V&file=a%2Fb)."
+        val links = Markdown.spans(text).filter { it.kind == Kind.LINK }
+        assertEquals(listOf(bare to bare, "la note" to "obsidian://open?vault=V&file=a%2Fb"), links.map { text.substring(it.start, it.end) to it.url })
+    }
+
+    @Test
+    fun `other app schemes stay plain text`() {
+        assertEquals(emptyList(), Markdown.spans("intent://x and [y](javascript:alert)").filter { it.kind == Kind.LINK })
+    }
+
+    @Test
     fun `plain text, lone stars and snake_case names are left alone`() {
         assertEquals(emptyList(), spans("2 * 3 = 6, file_name_here and a*b"))
         assertEquals(emptyList(), spans(""))

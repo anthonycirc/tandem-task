@@ -85,6 +85,8 @@
     <string name="app_theme">App theme</string>
     <string name="demo_no_writes">Demo mode: nothing is sent to Things.</string>
     <string name="exit_demo">Exit demo</string>
+    <string name="list_logbook">Logbook</string>
+    <string name="logbook_empty">Nothing completed yet.</string>
     <string name="list_trash">Trash</string>
     <string name="trash_empty">The Trash is empty.</string>
     <string name="in_trash">This to-do is in the Trash.</string>
@@ -98,6 +100,7 @@
     <string name="new_checklist_item">New item</string>
     <string name="delete_item">Delete item</string>
     <string name="tomorrow">Tomorrow</string>
+    <string name="yesterday">Yesterday</string>
     <string name="pending_count">%1$d to send</string>
     <string name="pending_explained">%1$d change(s) made on this phone are waiting to be sent to Things. They go out as soon as the network allows.</string>
     <string name="change_refused">Things refused a change, so it was dropped: %1$s</string>
@@ -125,6 +128,7 @@
     <string name="deadline">Deadline</string>
     <string name="add_deadline">Add a deadline</string>
     <string name="no_deadline">No deadline</string>
+    <string name="link_no_app">No app on this phone opens this link.</string>
     <string name="edit_project_title">Edit project</string>
     <string name="complete_project">Complete project</string>
     <string name="cancel_project">Cancel project</string>

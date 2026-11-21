@@ -58,4 +58,41 @@ class HistoryStateTest {
 
         assertEquals(state.objects, restored.objects)
     }
+
+    private fun notesOf(state: HistoryState, uuid: String) = Notes.toPlainText(state.objects.getValue(uuid).props["nt"])
+
+    @Test
+    fun `a note edited in Things applies its patches to the note, at UTF-8 byte offsets`() {
+        // As the Things app sent it: `ch` is the CRC32 of the edited text.
+        val state = HistoryState()
+        state.apply(WireParser.parseItem(item("""{"a": {"t": 0, "e": "Task6", "p": {"tt": "A", "nt": {"_t": "tx", "t": 1, "ch": 0, "v": "Native Task7 note α 🚀\nSecond line."}}}}""")))
+        state.apply(WireParser.parseItem(item("""{"a": {"t": 1, "e": "Task6", "p": {"nt": {"_t": "tx", "t": 2, "ps": [{"r": "Update", "p": 26, "l": 5, "ch": 3672733299}]}}}}""")))
+
+        assertEquals("Native Task7 note α 🚀\nUpdated line.", notesOf(state, "a"))
+        assertEquals("A", state.objects.getValue("a").props["tt"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `successive note edits build on each other, and a full note still replaces it`() {
+        val state = HistoryState()
+        state.apply(WireParser.parseItem(item("""{"a": {"t": 0, "e": "Task6", "p": {"tt": "A", "nt": {"_t": "tx", "t": 1, "v": "Plan"}}}}""")))
+        state.apply(WireParser.parseItem(item("""{"a": {"t": 1, "p": {"nt": {"_t": "tx", "t": 2, "ps": [{"r": "\nLinear : https://linear.app/x", "p": 4, "l": 0}]}}}}""")))
+        state.apply(WireParser.parseItem(item("""{"a": {"t": 1, "p": {"nt": {"_t": "tx", "t": 2, "ps": [{"r": "État", "p": 0, "l": 4}, {"r": "\nObsidian : obsidian://open?vault=V", "p": 35, "l": 0}]}}}}""")))
+
+        assertEquals("État\nLinear : https://linear.app/x\nObsidian : obsidian://open?vault=V", notesOf(state, "a"))
+
+        state.apply(WireParser.parseItem(item("""{"a": {"t": 1, "p": {"nt": {"_t": "tx", "t": 1, "v": "Fresh"}}}}""")))
+        assertEquals("Fresh", notesOf(state, "a"))
+    }
+
+    @Test
+    fun `an edited note survives the saved state`() {
+        val state = HistoryState()
+        state.apply(WireParser.parseItem(item("""{"a": {"t": 0, "e": "Task6", "p": {"nt": {"_t": "tx", "t": 1, "v": "ab"}}}}""")))
+        state.apply(WireParser.parseItem(item("""{"a": {"t": 1, "p": {"nt": {"_t": "tx", "t": 2, "ps": [{"r": "c", "p": 2, "l": 0}]}}}}""")))
+        val restored = HistoryState.fromJson(state.toJson())
+        restored.apply(WireParser.parseItem(item("""{"a": {"t": 1, "p": {"nt": {"_t": "tx", "t": 2, "ps": [{"r": "d", "p": 3, "l": 0}]}}}}""")))
+
+        assertEquals("abcd", notesOf(restored, "a"))
+    }
 }
