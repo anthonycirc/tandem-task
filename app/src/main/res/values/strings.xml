@@ -214,6 +214,8 @@
     <string name="tags_edit">Tags</string>
     <string name="place_none">No project or area</string>
     <string name="tags_none">No tags in Things yet. Create them in Things.</string>
+    <string name="tags_search">Search tags</string>
+    <string name="tags_no_match">No tag by that name.</string>
     <plurals name="selection_trashed">
         <item quantity="one">%d item moved to Trash</item>
         <item quantity="other">%d items moved to Trash</item>

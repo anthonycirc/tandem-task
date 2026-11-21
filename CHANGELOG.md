@@ -2,6 +2,12 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.4] - 2026-11-21
+
+### Added
+
+- **Search the tags.** The tag picker has a search field: type part of a name (accents and case aside) to narrow the list. Tags already picked stay picked while hidden.
+
 ## [0.5.3] - 2026-11-21
 
 ### Added

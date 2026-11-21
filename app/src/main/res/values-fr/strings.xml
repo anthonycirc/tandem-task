@@ -216,6 +216,8 @@
     <string name="tags_edit">Tags</string>
     <string name="place_none">Aucun projet ni zone</string>
     <string name="tags_none">Aucun tag dans Things pour l’instant. Crée-les dans Things.</string>
+    <string name="tags_search">Rechercher un tag</string>
+    <string name="tags_no_match">Aucun tag de ce nom.</string>
     <plurals name="selection_trashed">
         <item quantity="one">%d élément mis à la corbeille</item>
         <item quantity="other">%d éléments mis à la corbeille</item>

@@ -2793,20 +2793,37 @@ private fun SettingsDialog(
     )
 }
 
-/** Picks a to-do's or project's tags among Things' tags, in Things' order. */
+/**
+ * Picks a to-do's or project's tags among Things' tags, in Things' order. The field narrows the list
+ * by name (accents and case aside); tags already picked stay picked while hidden.
+ */
 @Composable
 private fun TagsDialog(library: ThingsLibrary, selected: Set<String>, onSave: (List<String>) -> Unit, onDismiss: () -> Unit) {
     val tags = remember(library) { library.tags() }
     var picked by rememberSaveable { mutableStateOf(selected.filter { id -> tags.any { it.id == id } }) }
+    var query by rememberSaveable { mutableStateOf("") }
+    val wanted = foldForSearch(query.trim())
+    val shown = if (wanted.isEmpty()) tags else tags.filter { foldForSearch(it.title).contains(wanted) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.tags_edit)) },
         text = {
             if (tags.isEmpty()) {
                 Text(stringResource(R.string.tags_none), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                    items(tags, key = { it.id }) { tag ->
+            } else Column {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text(stringResource(R.string.tags_search)) },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                )
+                if (shown.isEmpty()) {
+                    Text(stringResource(R.string.tags_no_match), Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                    items(shown, key = { it.id }) { tag ->
                         val on = tag.id in picked
                         Row(
                             Modifier.fillMaxWidth().clickable { picked = if (on) picked - tag.id else picked + tag.id }.padding(vertical = 4.dp),
