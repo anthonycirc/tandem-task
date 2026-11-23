@@ -81,26 +81,29 @@ object TaskEdits {
 
     /**
      * What Things 3.23+ writes when a repeating to-do's coming occurrence is checked before it was
-     * created (seen 2026-09/10 in the account's history): a new to-do copied from the template, dated
-     * [on] (`sr`, `tir`, `st` 2), already completed (`ss` 3, `sp`), `lt` true, `rt` the template; and
-     * on the template one more copy made (`icc`), the next creation the day after (`icsd`) and the
-     * next occurrence, [next] (`tir`), without `md`.
+     * created (seen 2026-09/10 in the account's history): a new to-do copied from the template's
+     * [stored] props as they are (untrimmed title included), with the keys of any new to-do; dated
+     * [on] (`sr`, `tir`), already completed (`ss` 3, `sp`), `lt` true, `rt` the template, no rule,
+     * no `acrd`, no copies of its own. And on the template one more copy made (`icc`), the next
+     * creation the day after (`icsd`) and the next occurrence, [next] (`tir`), without `md`.
      */
-    fun completeAhead(template: Task, on: LocalDate, next: LocalDate, copyId: String, now: Double): Map<String, JsonObject> {
-        val base = InboxTask.payload(
-            template.title, template.notes.orEmpty(), template.index, now, Schedule.OnDate(on), template.reminder,
-            projectId = template.projectId.takeIf { template.headingId == null },
-            areaId = template.areaId.takeIf { template.projectId == null && template.headingId == null },
-            headingId = template.headingId,
-            tagIds = template.tagIds,
-        )
-        val props = (base["p"] as JsonObject).toMutableMap()
-        props["lt"] = JsonPrimitive(true)
-        props["ss"] = JsonPrimitive(3)
-        props["sp"] = InboxTask.plainNumber(now)
-        props["rt"] = JsonArray(listOf(JsonPrimitive(template.id)))
-        props["ti"] = JsonPrimitive(template.todayIndex)
+    fun completeAhead(template: Task, stored: JsonObject, on: LocalDate, next: LocalDate, copyId: String, now: Double): Map<String, JsonObject> {
         fun midnight(date: LocalDate) = JsonPrimitive(date.toEpochDay() * InboxTask.SECONDS_PER_DAY)
+        // The key set of a new to-do; each value the template's own when it has one.
+        val keys = (InboxTask.payload("x", "", 0, now)["p"] as JsonObject)
+        val props = keys.mapValues { (key, blank) -> stored[key] ?: blank }.toMutableMap()
+        props["cd"] = InboxTask.plainNumber(now)
+        props["md"] = InboxTask.plainNumber(now)
+        props["sp"] = InboxTask.plainNumber(now)
+        props["sr"] = midnight(on)
+        props["tir"] = midnight(on)
+        props["ss"] = JsonPrimitive(3)
+        props["lt"] = JsonPrimitive(true)
+        props["rt"] = JsonArray(listOf(JsonPrimitive(template.id)))
+        props["rr"] = JsonNull
+        props["acrd"] = JsonNull
+        props["icc"] = JsonPrimitive(0)
+        props["icsd"] = JsonNull
         val copy = buildJsonObject {
             put("t", 0)
             put("e", "Task7")

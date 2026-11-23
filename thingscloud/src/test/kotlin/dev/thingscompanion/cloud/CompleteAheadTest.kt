@@ -86,6 +86,34 @@ class CompleteAheadTest {
     }
 
     @Test
+    fun `the copy takes the template's values as stored, untrimmed title and reminder fields included, but not its acrd`() {
+        val raw = library(templateExtra = """, "rmd": 1794000000, "rp": 3, "icp": true, "sb": 1, "do": 1, "acrd": ${s(dec1) - 40 * day}""")
+        val padded = ThingsLibrary.from(HistoryState().apply {
+            apply(WireParser.parseItem(Json.parseToJsonElement("""{
+                "tmpl": {"t": 0, "e": "Task7", "p": {"tt": " Pay rent  ", "nt": null, "st": 2, "ix": 4, "icc": 1, "tir": ${s(dec1)}, "rr": ${rr()}}}
+            }""") as JsonObject))
+        })
+        val p = props(build(raw), "copy")
+        assertEquals(34, p.size)
+        assertEquals(JsonPrimitive(1794000000), p["rmd"])
+        assertEquals(JsonPrimitive(3), p["rp"])
+        assertEquals(JsonPrimitive(true), p["icp"])
+        assertEquals(JsonPrimitive(1), p["sb"])
+        assertEquals(JsonPrimitive(1), p["do"])
+        // Things never copies acrd onto the occurrences it makes.
+        assertEquals(JsonNull, p["acrd"])
+        assertEquals(JsonPrimitive(" Pay rent  "), props(build(padded), "copy")["tt"])
+    }
+
+    @Test
+    fun `the last occurrence before the repeat ends stays with Things`() {
+        // Ends on Dec 15: after Dec 1 there is no next occurrence.
+        val ending = library(rr = rr().replace("\"ed\": 64092211200", "\"ed\": ${s(LocalDate.of(2026, 12, 15))}"))
+        assertFalse(ending.canCompleteAhead(ahead(ending)))
+        assertFailsWith<IllegalArgumentException> { build(ending) }
+    }
+
+    @Test
     fun `only the next occurrence can be checked ahead, the later ones once it is done`() {
         val lib = library()
         assertTrue(lib.canCompleteAhead(ahead(lib)))

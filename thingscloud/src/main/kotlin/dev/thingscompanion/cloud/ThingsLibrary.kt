@@ -91,8 +91,12 @@ class ThingsLibrary private constructor(
     private val areas: Map<String, Area>,
     private val tags: Map<String, Tag>,
     private val checklists: Map<String, List<ChecklistItem>>,
+    /** Repeating templates' props as stored: Things copies them as they are onto an occurrence checked ahead. */
+    private val templateProps: Map<String, JsonObject> = emptyMap(),
 ) {
     fun task(id: String): Task? = tasks[id]
+
+    internal fun storedTemplate(id: String): JsonObject? = templateProps[id]
 
     fun area(id: String): Area? = areas[id]
 
@@ -238,7 +242,8 @@ class ThingsLibrary private constructor(
         val rule = repeatRule(template) ?: return false
         return template.isTodo && template.isOpen && !template.trashed && !template.inTrashedContainer && template.isCurrentEntity &&
             !rule.afterCompletion && rule.leadDays == 0 && template.deadline == null && checklist(template.id).isEmpty() &&
-            day == template.nextOccurrence && rule.nextAfter(day)?.isAfter(day) == true &&
+            day == template.nextOccurrence && rule.nextAfter(day)?.let { next -> next.isAfter(day) && (rule.endDate == null || !next.isAfter(rule.endDate)) } == true &&
+            templateProps[template.id] != null &&
             instancesOf(template.id).none { it.startDate == day && !it.trashed }
     }
 
@@ -537,7 +542,8 @@ class ThingsLibrary private constructor(
                 .groupBy({ it.first }, { it.second })
                 .mapValues { (_, items) -> items.sortedBy { it.index } }
 
-            return ThingsLibrary(tasks, areas, tags, checklists)
+            val templateProps = rawTasks.filterKeys { tasks[it]?.isRecurrenceTemplate == true }.mapValues { (_, obj) -> JsonObject(obj.props) }
+            return ThingsLibrary(tasks, areas, tags, checklists, templateProps)
         }
 
         private fun Map<String, JsonElement>.int(key: String): Int? = this[key].primitiveOrNull()?.intOrNull

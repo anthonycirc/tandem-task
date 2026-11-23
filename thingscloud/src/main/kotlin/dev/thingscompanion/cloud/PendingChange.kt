@@ -238,7 +238,7 @@ sealed interface PendingChange {
             val on = LocalDate.ofEpochDay(day)
             require(library.canCompleteAhead(template.copy(startDate = on))) { "This occurrence can't be checked ahead from the app." }
             val next = requireNotNull(library.repeatRule(template)?.nextAfter(on))
-            return TaskEdits.completeAhead(template, on, next, copyId, now)
+            return TaskEdits.completeAhead(template, requireNotNull(library.storedTemplate(templateId)), on, next, copyId, now)
         }
     }
 
