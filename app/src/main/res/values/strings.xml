@@ -286,4 +286,5 @@
         <item quantity="other">%d open to-dos</item>
     </plurals>
     <string name="group_by_project">Group by project</string>
+    <string name="place_search">Search projects and areas</string>
 </resources>

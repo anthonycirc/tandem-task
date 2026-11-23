@@ -290,4 +290,5 @@
         <item quantity="other">%d to-dos ouvertes</item>
     </plurals>
     <string name="group_by_project">Grouper par projet</string>
+    <string name="place_search">Chercher un projet ou une zone</string>
 </resources>

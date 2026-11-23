@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -77,12 +78,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -1467,36 +1464,47 @@ private fun PlaceDialog(
             if (current) Text("✓", color = muted)
         }
     }
+    // Every choice in the tree's order; a search lists the matching ones flat, a heading with its project.
+    class Entry(val kind: ListKind?, val label: String, val indent: Int, val isCurrent: Boolean, val destination: PendingChange.Destination, val searchLabel: String = label)
+    val inboxLabel = stringResource(R.string.list_inbox)
+    val noAreaLabel = stringResource(R.string.no_area)
+    val entries = remember(library, isProject, current, headings) {
+        buildList {
+            if (isProject) {
+                add(Entry(null, noAreaLabel, 0, current?.areaId == null, PendingChange.Destination()))
+                library.areas().forEach { area -> add(Entry(ListKind.AREA, area.title, 0, current?.areaId == area.id, PendingChange.Destination(areaId = area.id))) }
+            } else {
+                add(Entry(ListKind.INBOX, inboxLabel, 0, current?.inbox == true, PendingChange.Destination(inbox = true)))
+                fun project(project: Task, indent: Int) {
+                    add(Entry(ListKind.PROJECT, project.title, indent, current?.projectId == project.id, PendingChange.Destination(projectId = project.id)))
+                    if (headings) library.projectSections(project.id).mapNotNull { it.heading }.forEach { heading ->
+                        add(Entry(null, heading.title, indent + 1, current?.headingId == heading.id, PendingChange.Destination(headingId = heading.id), "${project.title} › ${heading.title}"))
+                    }
+                }
+                library.projects().filter { it.areaId == null }.forEach { project(it, 0) }
+                library.areas().forEach { area ->
+                    add(Entry(ListKind.AREA, area.title, 0, current?.areaId == area.id, PendingChange.Destination(areaId = area.id)))
+                    library.areaProjects(area.id).forEach { project(it, 1) }
+                }
+            }
+        }
+    }
+    var query by rememberSaveable { mutableStateOf("") }
+    val wanted = foldForSearch(query.trim())
+    val shown = if (wanted.isEmpty()) entries else entries.filter { foldForSearch(it.searchLabel).contains(wanted) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(if (isProject) R.string.move_to_area else title)) },
         text = {
-            LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                if (isProject) {
-                    item { Choice(null, stringResource(R.string.no_area), 0, current?.areaId == null, PendingChange.Destination()) }
-                    items(library.areas(), key = { it.id }) { area ->
-                        Choice(ListKind.AREA, area.title, 0, current?.areaId == area.id, PendingChange.Destination(areaId = area.id))
-                    }
-                } else {
-                    item {
-                        Choice(ListKind.INBOX, stringResource(R.string.list_inbox), 0, current?.inbox == true, PendingChange.Destination(inbox = true))
-                    }
-                    fun LazyListScope.project(project: Task, indent: Int) {
-                        item(key = project.id) {
-                            Choice(ListKind.PROJECT, project.title, indent, current?.projectId == project.id, PendingChange.Destination(projectId = project.id))
-                        }
-                        if (headings) library.projectSections(project.id).mapNotNull { it.heading }.forEach { heading ->
-                            item(key = heading.id) {
-                                Choice(null, heading.title, indent + 1, current?.headingId == heading.id, PendingChange.Destination(headingId = heading.id))
-                            }
-                        }
-                    }
-                    library.projects().filter { it.areaId == null }.forEach { project(it, 0) }
-                    library.areas().forEach { area ->
-                        item(key = area.id) {
-                            Choice(ListKind.AREA, area.title, 0, current?.areaId == area.id, PendingChange.Destination(areaId = area.id))
-                        }
-                        library.areaProjects(area.id).forEach { project(it, 1) }
+            Column {
+                SearchField(query, onQuery = { query = it }, placeholder = stringResource(R.string.place_search))
+                if (shown.isEmpty()) {
+                    Text(stringResource(R.string.search_none), Modifier.padding(vertical = 8.dp), color = muted)
+                }
+                LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                    items(shown, key = { it.destination.toString() }) { entry ->
+                        val label = if (wanted.isEmpty()) entry.label else entry.searchLabel
+                        Choice(entry.kind, label, if (wanted.isEmpty()) entry.indent else 0, entry.isCurrent, entry.destination)
                     }
                 }
             }
@@ -2577,25 +2585,79 @@ private fun Fact(
     }
 }
 
-/** A read-only field naming the current choice, opening a menu of choices under it. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** A read-only field naming the current choice; a tap opens its picker. */
 @Composable
-private fun FilterDropdown(label: String, value: String, items: @Composable ColumnScope.(close: () -> Unit) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+private fun PickerField(label: String, value: String, onClick: () -> Unit) {
+    Box {
         OutlinedTextField(
             value = value,
             onValueChange = {},
             readOnly = true,
             singleLine = true,
             label = { Text(label) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
+            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) },
+            modifier = Modifier.fillMaxWidth(),
         )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            items { expanded = false }
+        // Over the field, which would otherwise take the tap for its text.
+        Box(Modifier.matchParentSize().padding(top = 8.dp).clip(MaterialTheme.shapes.extraSmall).clickable(onClickLabel = label, onClick = onClick))
+    }
+}
+
+/** The filter's project or area: all, or one, picked from the areas with their projects, then those with no area; a field narrows them. */
+@Composable
+private fun FilterPlaceDialog(library: ThingsLibrary, current: String?, onPick: (String?) -> Unit, onDismiss: () -> Unit) {
+    class Entry(val id: String?, val kind: ListKind?, val label: String, val indent: Int, val strong: Boolean = false)
+    val allLabel = stringResource(R.string.filter_all)
+    val entries = remember(library) {
+        val areas = library.areas()
+        val projects = library.projects()
+        buildList {
+            add(Entry(null, null, allLabel, 0))
+            // Projects under their area, as the Projects list shows them; then those with no area.
+            areas.forEach { area ->
+                add(Entry(area.id, ListKind.AREA, area.title, 0, strong = true))
+                projects.filter { it.areaId == area.id }.forEach { add(Entry(it.id, ListKind.PROJECT, it.title, 1)) }
+            }
+            projects.filter { project -> areas.none { it.id == project.areaId } }.forEach { add(Entry(it.id, ListKind.PROJECT, it.title, 0)) }
         }
     }
+    var query by rememberSaveable { mutableStateOf("") }
+    val wanted = foldForSearch(query.trim())
+    val shown = if (wanted.isEmpty()) entries else entries.filter { it.id != null && foldForSearch(it.label).contains(wanted) }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.project_or_area)) },
+        text = {
+            Column {
+                SearchField(query, onQuery = { query = it }, placeholder = stringResource(R.string.place_search))
+                if (shown.isEmpty()) Text(stringResource(R.string.search_none), Modifier.padding(vertical = 8.dp), color = muted)
+                LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                    items(shown, key = { it.id ?: "all" }) { entry ->
+                        val picked = entry.id == current
+                        Row(
+                            Modifier.fillMaxWidth().clickable { onPick(entry.id) }
+                                .padding(start = (8 + (if (wanted.isEmpty()) entry.indent else 0) * 20).dp, top = 10.dp, bottom = 10.dp, end = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (entry.kind != null) ListIcon(entry.kind, size = 18.dp) else Spacer(Modifier.width(18.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                entry.label,
+                                fontWeight = if (entry.strong) FontWeight.SemiBold else null,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (picked) Text("✓", color = muted)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 /** Show-completed option and display filters: tags (any), one project or area, one day. */
@@ -2603,6 +2665,30 @@ private fun FilterDropdown(label: String, value: String, items: @Composable Colu
 @Composable
 private fun FilterDialog(library: ThingsLibrary, filter: TaskFilter, onChange: (TaskFilter) -> Unit, onDismiss: () -> Unit) {
     var pickingDay by remember { mutableStateOf(false) }
+    var pickingTags by remember { mutableStateOf(false) }
+    var pickingPlace by remember { mutableStateOf(false) }
+    if (pickingTags) {
+        TagsDialog(
+            library = library,
+            selected = filter.tagIds,
+            onSave = {
+                pickingTags = false
+                onChange(filter.copy(tagIds = it.toSet()))
+            },
+            onDismiss = { pickingTags = false },
+        )
+    }
+    if (pickingPlace) {
+        FilterPlaceDialog(
+            library = library,
+            current = filter.containerId,
+            onPick = {
+                pickingPlace = false
+                onChange(filter.copy(containerId = it))
+            },
+            onDismiss = { pickingPlace = false },
+        )
+    }
     if (pickingDay) {
         DayPickerDialog(
             today = ThingsDay.today(),
@@ -2638,62 +2724,22 @@ private fun FilterDialog(library: ThingsLibrary, filter: TaskFilter, onChange: (
                         FilterChip(selected = false, onClick = { onChange(filter.copy(day = null)) }, label = { Text(stringResource(R.string.any_date)) })
                     }
                 }
+                // Each opens a picker with a search field.
                 val tags = library.tags()
                 if (tags.isNotEmpty()) {
                     val chosen = tags.filter { it.id in filter.tagIds }
-                    FilterDropdown(
+                    PickerField(
                         label = stringResource(R.string.tags),
                         value = chosen.joinToString(", ") { it.title }.ifEmpty { stringResource(R.string.filter_all) },
-                    ) { _ ->
-                        DropdownMenuItem(text = { Text(stringResource(R.string.filter_all)) }, onClick = { onChange(filter.copy(tagIds = emptySet())) })
-                        // Several tags can be chosen: the menu stays open.
-                        tags.forEach { tag ->
-                            val selected = tag.id in filter.tagIds
-                            DropdownMenuItem(
-                                text = { Text(tag.title) },
-                                leadingIcon = { Checkbox(checked = selected, onCheckedChange = null) },
-                                onClick = { onChange(filter.copy(tagIds = if (selected) filter.tagIds - tag.id else filter.tagIds + tag.id)) },
-                            )
-                        }
-                    }
+                        onClick = { pickingTags = true },
+                    )
                 }
-                val areas = library.areas()
-                val projects = library.projects()
-                val containerTitle = areas.firstOrNull { it.id == filter.containerId }?.title
-                    ?: projects.firstOrNull { it.id == filter.containerId }?.title
-                FilterDropdown(
+                val containerTitle = filter.containerId?.let { id -> library.area(id)?.title ?: library.task(id)?.title }
+                PickerField(
                     label = stringResource(R.string.project_or_area),
                     value = containerTitle ?: stringResource(R.string.filter_all),
-                ) { close ->
-                    fun pick(id: String?) {
-                        onChange(filter.copy(containerId = id))
-                        close()
-                    }
-                    DropdownMenuItem(text = { Text(stringResource(R.string.filter_all)) }, onClick = { pick(null) })
-                    // Projects under their area, as the Projects list shows them; then those with no area.
-                    areas.forEach { area ->
-                        DropdownMenuItem(
-                            text = { Text(area.title, fontWeight = FontWeight.SemiBold) },
-                            leadingIcon = { ListIcon(ListKind.AREA, size = 18.dp) },
-                            onClick = { pick(area.id) },
-                        )
-                        projects.filter { it.areaId == area.id }.forEach { project ->
-                            DropdownMenuItem(
-                                text = { Text(project.title) },
-                                leadingIcon = { ListIcon(ListKind.PROJECT, size = 16.dp) },
-                                onClick = { pick(project.id) },
-                                contentPadding = PaddingValues(start = 32.dp, end = 12.dp),
-                            )
-                        }
-                    }
-                    projects.filter { project -> areas.none { it.id == project.areaId } }.forEach { project ->
-                        DropdownMenuItem(
-                            text = { Text(project.title) },
-                            leadingIcon = { ListIcon(ListKind.PROJECT, size = 16.dp) },
-                            onClick = { pick(project.id) },
-                        )
-                    }
-                }
+                    onClick = { pickingPlace = true },
+                )
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } },
@@ -2865,14 +2911,7 @@ private fun TagsDialog(library: ThingsLibrary, selected: Set<String>, onSave: (L
             if (tags.isEmpty()) {
                 Text(stringResource(R.string.tags_none), color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else Column {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    placeholder = { Text(stringResource(R.string.tags_search)) },
-                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                )
+                SearchField(query, onQuery = { query = it }, placeholder = stringResource(R.string.tags_search))
                 if (shown.isEmpty()) {
                     Text(stringResource(R.string.tags_no_match), Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -2913,6 +2952,19 @@ private fun SelectionMark(picked: Boolean, modifier: Modifier = Modifier) {
             if (picked) Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
         }
     }
+}
+
+/** The field that narrows a picker's list as one types. */
+@Composable
+private fun SearchField(query: String, onQuery: (String) -> Unit, placeholder: String) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQuery,
+        placeholder = { Text(placeholder) },
+        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+    )
 }
 
 /** Text compared for search: lower case, without accents. */
