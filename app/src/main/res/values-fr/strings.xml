@@ -290,5 +290,4 @@
     <string name="group_by_project">Grouper par projet</string>
     <string name="place_search">Chercher un projet ou une zone</string>
     <string name="add_reminder">Ajouter un rappel</string>
-    <string name="add_deadline">Ajouter une échéance</string>
 </resources>
