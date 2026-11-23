@@ -1077,10 +1077,26 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                                 else -> library.someday(closedOn = today)
                             }
                             val tasks = filter.apply(listed)
+                            // Classed by project: a group per project or area, under the section it shows in.
+                            val grouped = filter.groupByProject && tab != ListTab.UPCOMING && tab != ListTab.DEADLINES
+                            fun byProject(section: Group, items: List<Task>): List<Pair<Group, List<Task>>> {
+                                if (!grouped) return listOf(section to items)
+                                val places = library.byProject(items)
+                                val loose = places.firstOrNull { it.first == null }?.second.orEmpty()
+                                return listOf(section to loose) + places.mapNotNull { (id, items) ->
+                                    val project = id?.let(library::task)
+                                    val area = id?.let(library::area)
+                                    when {
+                                        project != null -> Group.Place(project.id, project.title, ListKind.PROJECT) to items
+                                        area != null -> Group.Place(area.id, area.title, ListKind.AREA) to items
+                                        else -> null
+                                    }
+                                }
+                            }
                             val groups = when (tab) {
                                 ListTab.TODAY -> {
                                     val (evening, day) = tasks.partition { it.evening }
-                                    listOf(Group.None to day, Group.Evening to evening)
+                                    byProject(Group.None, day) + if (evening.isEmpty()) emptyList() else byProject(Group.Evening, evening)
                                 }
                                 // Undated items due later are filed under their deadline day, as in Things.
                                 ListTab.UPCOMING -> tasks.groupBy { it.upcomingDay }.map { (date, items) ->
@@ -1091,7 +1107,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                                     val (overdue, coming) = tasks.partition { it.deadline!!.isBefore(today) }
                                     listOf(Group.Overdue to overdue) + coming.groupBy { it.deadline!! }.map { (day, items) -> Group.Day(day) to items }
                                 }
-                                else -> listOf(Group.None to tasks)
+                                else -> byProject(Group.None, tasks)
                             }
                             TaskList(
                                 library = library,
@@ -1107,7 +1123,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                                     } else {
                                         viewModel.reorder(task.id, order, tab.name)
                                     }
-                                }.takeIf { filter.isEmpty && tab != ListTab.UPCOMING && tab != ListTab.DEADLINES },
+                                }.takeIf { filter.isEmpty && !grouped && tab != ListTab.UPCOMING && tab != ListTab.DEADLINES },
                                 // In Today only for its deadline: no Today order to change.
                                 canDrag = { tab != ListTab.TODAY || it.startDate != null },
                             )
@@ -1623,6 +1639,8 @@ private sealed interface Group {
     data class Day(val date: LocalDate) : Group
     /** The Deadlines list's first section: what is past its deadline. */
     data object Overdue : Group
+    /** To-dos of one project or area, when a list is grouped by project. */
+    data class Place(val id: String, val title: String, val kind: ListKind) : Group
 }
 
 /** The list's icon and name in large type, as Things opens each list; [count] open to-dos after it, when there are any. */
@@ -1669,6 +1687,14 @@ private fun GroupHeader(group: Group, onHeading: (Group.Heading) -> Unit = {}) {
                 ListIcon(ListKind.EVENING, size = 18.dp)
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.this_evening), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ListColors.evening)
+            }
+            HorizontalDivider(Modifier.padding(top = 6.dp))
+        }
+        is Group.Place -> Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ListIcon(group.kind, size = 16.dp)
+                Spacer(Modifier.width(8.dp))
+                Text(group.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             HorizontalDivider(Modifier.padding(top = 6.dp))
         }
@@ -1733,8 +1759,9 @@ private fun TaskList(
     val built = remember(groups) {
         groups.withIndex().flatMap { (index, entry) ->
             val (group, tasks) = entry
-            // A heading shows even when empty, as in Things.
-            if (tasks.isEmpty() && group !is Group.Heading) emptyList()
+            // A heading shows even when empty, as in Things; so does This Evening when project groups follow it.
+            val keep = group is Group.Heading || (group == Group.Evening && groups.getOrNull(index + 1)?.first is Group.Place)
+            if (tasks.isEmpty() && !keep) emptyList()
             else listOf(HeaderRow(group, "group-" + ((group as? Group.Heading)?.id ?: index.toString()))) + tasks.map(::TaskItemRow)
         }
     }
@@ -2596,6 +2623,10 @@ private fun FilterDialog(library: ThingsLibrary, filter: TaskFilter, onChange: (
                     Text(stringResource(R.string.show_completed), Modifier.weight(1f))
                     Switch(checked = filter.showClosed, onCheckedChange = { onChange(filter.copy(showClosed = it)) })
                 }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.group_by_project), Modifier.weight(1f))
+                    Switch(checked = filter.groupByProject, onCheckedChange = { onChange(filter.copy(groupByProject = it)) })
+                }
                 Text(stringResource(R.string.date), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
@@ -2667,7 +2698,7 @@ private fun FilterDialog(library: ThingsLibrary, filter: TaskFilter, onChange: (
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } },
         dismissButton = {
-            TextButton(onClick = { onChange(TaskFilter(showClosed = filter.showClosed)) }, enabled = !filter.isEmpty) {
+            TextButton(onClick = { onChange(TaskFilter(showClosed = filter.showClosed, groupByProject = filter.groupByProject)) }, enabled = !filter.isEmpty) {
                 Text(stringResource(R.string.clear_filters))
             }
         },

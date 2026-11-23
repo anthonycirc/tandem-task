@@ -92,7 +92,10 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
     private val _state = MutableStateFlow(
         UiState(
             signedIn = repository.isSignedIn,
-            filter = TaskFilter(showClosed = displayPrefs.getBoolean(KEY_SHOW_CLOSED, true)),
+            filter = TaskFilter(
+                showClosed = displayPrefs.getBoolean(KEY_SHOW_CLOSED, true),
+                groupByProject = displayPrefs.getBoolean(KEY_GROUP_BY_PROJECT, false),
+            ),
             themeMode = displayPrefs.getString(KEY_THEME, null)
                 ?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
             tabOrder = displayPrefs.getString(KEY_TAB_ORDER, null)?.split(',')?.filter { it.isNotBlank() }.orEmpty(),
@@ -553,7 +556,7 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setFilter(filter: TaskFilter) {
-        displayPrefs.edit().putBoolean(KEY_SHOW_CLOSED, filter.showClosed).apply()
+        displayPrefs.edit().putBoolean(KEY_SHOW_CLOSED, filter.showClosed).putBoolean(KEY_GROUP_BY_PROJECT, filter.groupByProject).apply()
         _state.update { it.copy(filter = filter) }
     }
 
@@ -581,6 +584,7 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         const val SEND_DELAY_MS = 8_000L
 
         const val KEY_SHOW_CLOSED = "show_closed"
+        const val KEY_GROUP_BY_PROJECT = "group_by_project"
         const val KEY_THEME = "theme"
         const val KEY_TAB_ORDER = "tab_order"
         const val KEY_HIDDEN_TABS = "hidden_tabs"

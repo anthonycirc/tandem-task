@@ -323,6 +323,20 @@ class ThingsLibrary private constructor(
         return if (all.isEmpty()) 0f else all.count { !it.isOpen }.toFloat() / all.size
     }
 
+    /**
+     * [tasks] classed by project, as the lists show them grouped: to-dos in no project or area
+     * first (key null), then the sidebar's order: projects with no area, then each area (its own
+     * to-dos, then its projects'). Each group keeps [tasks]' order; places with none are left out.
+     */
+    fun byProject(tasks: List<Task>): List<Pair<String?, List<Task>>> {
+        val groups = tasks.groupBy { it.projectId ?: it.areaId }
+        val sidebar = listOf(null) + projects().filter { it.areaId == null }.map { it.id } +
+            areas().flatMap { area -> listOf(area.id) + areaProjects(area.id).map { it.id } }
+        // A place the sidebar no longer lists (a project closed today) goes last.
+        val order = sidebar.filter { it in groups } + groups.keys.filter { it !in sidebar }
+        return order.map { it to groups.getValue(it) }
+    }
+
     /** An area's open projects, in Things' order. */
     fun areaProjects(areaId: String): List<Task> = projects().filter { it.areaId == areaId }
 

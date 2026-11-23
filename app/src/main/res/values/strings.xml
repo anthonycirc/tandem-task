@@ -285,4 +285,5 @@
         <item quantity="one">%d open to-do</item>
         <item quantity="other">%d open to-dos</item>
     </plurals>
+    <string name="group_by_project">Group by project</string>
 </resources>
