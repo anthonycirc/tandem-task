@@ -296,6 +296,23 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         deadline?.let { change(PendingChange.SetDeadline(newId(), id, it.toEpochDay())) }
     }
 
+    /** A to-do's or project's title or notes changed in place, in its sheet or header: When and reminder stay. */
+    fun rename(id: String, title: String, notes: String) {
+        val task = _state.value.library?.task(id) ?: return
+        change(PendingChange.EditTask(newId(), id, title, notes, PendingChange.When.of(Schedule.of(task, ThingsDay.today())), task.reminder?.toSecondOfDay()), done = R.string.saved)
+    }
+
+    /** A dated to-do's reminder set, changed or removed ([reminder] null) from its sheet. */
+    fun setReminder(id: String, reminder: LocalTime?) {
+        val task = _state.value.library?.task(id) ?: return
+        change(
+            PendingChange.EditTask(newId(), id, task.title, task.notes.orEmpty(), PendingChange.When.of(Schedule.of(task, ThingsDay.today())), reminder?.toSecondOfDay()),
+            done = R.string.saved,
+        )
+    }
+
+    fun renameChecklistItem(itemId: String, title: String) = change(PendingChange.RenameChecklistItem(newId(), itemId, title))
+
     fun addHeading(projectId: String, title: String) = change(PendingChange.AddHeading(newId(), newId(), projectId, title))
 
     fun addArea(title: String) = change(PendingChange.AddArea(newId(), newId(), title), done = R.string.added)

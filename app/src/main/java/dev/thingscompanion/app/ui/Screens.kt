@@ -75,6 +75,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenuItem
@@ -120,6 +121,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -157,9 +159,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.thingscompanion.app.R
 import dev.thingscompanion.cloud.Schedule
@@ -169,9 +173,11 @@ import dev.thingscompanion.cloud.TaskStatus
 import dev.thingscompanion.cloud.TaskType
 import dev.thingscompanion.cloud.ThingsDay
 import dev.thingscompanion.cloud.ThingsLibrary
+import dev.thingscompanion.cloud.TitleEmoji
 import kotlinx.coroutines.delay
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
@@ -275,7 +281,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     val shownTabs = ListLayout.shown(allTabs, state.tabOrder, state.hiddenTabs).map(ListTab::valueOf)
     var tab by rememberSaveable { mutableStateOf(shownTabs.first()) }
     var adding by rememberSaveable { mutableStateOf(false) }
-    var editingId by rememberSaveable { mutableStateOf<String?>(null) }
+    // A reminder changed from a to-do's sheet.
+    var reminderId by rememberSaveable { mutableStateOf<String?>(null) }
     var filtering by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
     var projectId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -470,6 +477,21 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
             },
         )
     }
+    val reminderOf = reminderId?.let { library?.task(it) }
+    if (reminderOf != null) {
+        TimePickerDialog(
+            initial = reminderOf.reminder ?: LocalTime.of(9, 0),
+            onPicked = {
+                reminderId = null
+                viewModel.setReminder(reminderOf.id, it)
+            },
+            onDismiss = { reminderId = null },
+            onClear = {
+                reminderId = null
+                viewModel.setReminder(reminderOf.id, null)
+            }.takeIf { reminderOf.reminder != null },
+        )
+    }
     val tagging = taggingId?.let { library?.task(it) }
     if (tagging != null && library != null) {
         TagsDialog(
@@ -531,51 +553,6 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
             },
         )
     }
-    val edited = editingId?.let { library?.task(it) }
-    if (edited != null && library != null && edited.type == TaskType.PROJECT) {
-        // A project: title, notes, When and deadline; no checklist, reminder or Inbox.
-        TaskFormScreen(
-            initial = TaskDraft(edited.title, edited.notes.orEmpty(), Schedule.of(edited, ThingsDay.today()), edited.reminder, deadline = edited.deadline),
-            heading = R.string.edit_project_title,
-            confirm = R.string.save,
-            allowSchedule = library.canEditProject(edited),
-            allowInbox = false,
-            allowChecklist = false,
-            allowDeadline = library.canSetDeadline(edited),
-            allowReminder = false,
-            onSubmit = { title, notes, schedule, reminder, _, deadline ->
-                editingId = null
-                viewModel.editTask(edited.id, title, notes, schedule, reminder, deadline = deadline)
-            },
-            onDismiss = { editingId = null },
-        )
-        return
-    }
-    if (edited != null && library != null) {
-        TaskFormScreen(
-            initial = TaskDraft(
-                edited.title,
-                edited.notes.orEmpty(),
-                Schedule.of(edited, ThingsDay.today()),
-                edited.reminder,
-                library.checklist(edited.id).map { ChecklistDraft(it.id, it.title, it.done) },
-                edited.deadline,
-            ),
-            heading = R.string.edit_todo_title,
-            confirm = R.string.save,
-            allowSchedule = library.canReschedule(edited),
-            allowInbox = edited.projectId == null && edited.areaId == null,
-            allowChecklist = library.canEditChecklist(edited),
-            allowDeadline = library.canSetDeadline(edited),
-            onSubmit = { title, notes, schedule, reminder, checklist, deadline ->
-                editingId = null
-                viewModel.editTask(edited.id, title, notes, schedule, reminder, checklist.takeIf { library.canEditChecklist(edited) }, deadline)
-            },
-            onDismiss = { editingId = null },
-        )
-        return
-    }
-
     if (searching && library != null) {
         SearchScreen(
             library = library,
@@ -942,7 +919,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             ProjectHeader(
                                 library = library,
                                 project = openProject,
-                                onEdit = { editingId = openProject.id },
+                                onRename = { title, notes -> viewModel.rename(openProject.id, title, notes) },
                                 onMove = { movingId = openProject.id },
                                 onTrash = {
                                     projectId = null
@@ -1183,11 +1160,6 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
         val sheetState = rememberModalBottomSheetState()
         ModalBottomSheet(onDismissRequest = { taskId = null }, sheetState = sheetState) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                if (openTask.type == TaskType.TODO && !openTask.trashed) {
-                    IconButton(onClick = { editingId = openTask.id }) {
-                        Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.edit))
-                    }
-                }
                 if (library.canMakeRepeating(openTask)) {
                     val repeatLabel = stringResource(R.string.repeat_title)
                     IconButton(onClick = { repeatingId = openTask.id }, modifier = Modifier.semantics { contentDescription = repeatLabel }) {
@@ -1229,6 +1201,9 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 onChecklistDone = viewModel::setChecklistItemDone,
                 onAddChecklistItem = viewModel::addChecklistItem,
                 onDeleteChecklistItem = viewModel::deleteChecklistItem,
+                onRenameChecklistItem = viewModel::renameChecklistItem,
+                onRename = viewModel::rename,
+                onReminder = { reminderId = it },
                 onRestore = viewModel::restore,
                 onDeleteForever = { deletingForever = listOf(it) },
                 onTags = { taggingId = it },
@@ -2218,7 +2193,7 @@ private fun ProjectList(
 private fun ProjectHeader(
     library: ThingsLibrary,
     project: Task,
-    onEdit: () -> Unit,
+    onRename: (title: String, notes: String) -> Unit,
     onMove: () -> Unit,
     onTrash: () -> Unit,
     onStatus: (TaskStatus) -> Unit,
@@ -2261,19 +2236,28 @@ private fun ProjectHeader(
                 size = 26.dp,
                 contentDescription = stringResource(R.string.complete_project),
             )
-            Text(
-                project.title,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                textDecoration = if (project.isOpen) null else TextDecoration.LineThrough,
+            // A tap on the title or the notes changes them in place.
+            val titleStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold)
+            InlineEditable(
+                value = project.title,
+                onSave = { title: String -> onRename(title, project.notes.orEmpty()) }.takeIf { editable },
+                singleLine = true,
+                textStyle = titleStyle,
+                withEmoji = true,
                 modifier = Modifier.weight(1f, fill = false),
-            )
+            ) { tap ->
+                Text(
+                    project.title,
+                    style = titleStyle,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textDecoration = if (project.isOpen) null else TextDecoration.LineThrough,
+                    modifier = tap,
+                )
+            }
             OpenCount(library.projectTasks(project.id).size)
             Spacer(Modifier.weight(1f))
             if (editable) {
-                IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.edit)) }
                 Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.more)) }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -2281,6 +2265,12 @@ private fun ProjectHeader(
                             menu = false
                             onMove()
                         })
+                        if (project.deadline == null && project.isOpen) {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.add_deadline)) }, onClick = {
+                                menu = false
+                                onDeadline()
+                            })
+                        }
                         if (library.canTag(project)) {
                             DropdownMenuItem(text = { Text(stringResource(R.string.tags_edit)) }, onClick = {
                                 menu = false
@@ -2352,6 +2342,19 @@ private fun ProjectHeader(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) { tags.forEach { TagPill(it) } }
         }
+        // The project's notes, as Things shows them under its title; "No notes" only when they can be added.
+        if (!project.notes.isNullOrBlank() || editable) {
+            val notesStyle = MaterialTheme.typography.bodyMedium
+            InlineEditable(
+                value = project.notes.orEmpty(),
+                onSave = { notes: String -> onRename(project.title, notes) }.takeIf { editable },
+                singleLine = false,
+                textStyle = notesStyle,
+                allowBlank = true,
+                markdown = true,
+                modifier = Modifier.padding(start = 44.dp, end = 12.dp, top = 6.dp),
+            ) { tap -> NotesText(project.notes, notesStyle, tap, selectable = !editable) }
+        }
     }
 }
 
@@ -2382,6 +2385,9 @@ private fun TaskDetail(
     onDeleteChecklistItem: (String) -> Unit,
     onRestore: (String) -> Unit,
     onDeleteForever: (String) -> Unit,
+    onRenameChecklistItem: (String, String) -> Unit = { _, _ -> },
+    onRename: (id: String, title: String, notes: String) -> Unit = { _, _, _ -> },
+    onReminder: (String) -> Unit = {},
     onTags: (String) -> Unit = {},
     onReschedule: (String) -> Unit = {},
     onDeadline: (String) -> Unit = {},
@@ -2391,6 +2397,7 @@ private fun TaskDetail(
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val focusManager = LocalFocusManager.current
+    val textEditable = task.type == TaskType.TODO && !task.trashed
     Column(
         modifier.imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -2413,42 +2420,39 @@ private fun TaskDetail(
             } else {
                 ListIcon(ListKind.PROJECT, Modifier.padding(10.dp), size = 24.dp, progress = library.projectProgress(task.id))
             }
-            Text(
-                task.title,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
-                textDecoration = if (task.isOpen) null else TextDecoration.LineThrough,
-            )
+            // Title and notes change in place, where the edit form allowed it: an untrashed to-do.
+            val titleStyle = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold)
+            InlineEditable(
+                value = task.title,
+                onSave = { title: String -> onRename(task.id, title, task.notes.orEmpty()) }.takeIf { textEditable },
+                singleLine = true,
+                textStyle = titleStyle,
+                withEmoji = true,
+                modifier = Modifier.weight(1f),
+            ) { tap ->
+                Text(
+                    task.title,
+                    style = titleStyle,
+                    textDecoration = if (task.isOpen) null else TextDecoration.LineThrough,
+                    modifier = tap,
+                )
+            }
         }
         if (task.type == TaskType.TODO && !library.canComplete(task) && !task.trashed && task.isRepeating) {
             Text(stringResource(R.string.repeating_locked), Modifier.padding(start = 12.dp), style = MaterialTheme.typography.labelMedium, color = muted)
         }
 
         Column(Modifier.padding(start = 12.dp, end = 12.dp)) {
-            SelectionContainer {
-                val notes = task.notes
-                if (notes == null) {
-                    Text(stringResource(R.string.no_notes), style = MaterialTheme.typography.bodyLarge, color = muted)
-                } else {
-                    val colors = markdownColors()
-                    // An Obsidian link needs the app: without it, a short message instead of a crash.
-                    val context = LocalContext.current
-                    val noApp = stringResource(R.string.link_no_app)
-                    val links = remember(context, noApp) {
-                        object : UriHandler {
-                            override fun openUri(uri: String) {
-                                try {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)))
-                                } catch (_: ActivityNotFoundException) {
-                                    Toast.makeText(context, noApp, Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        }
-                    }
-                    CompositionLocalProvider(LocalUriHandler provides links) {
-                        Text(remember(notes, colors) { markdown(notes, colors, clickableLinks = true) }, style = MaterialTheme.typography.bodyLarge)
-                    }
-                }
+            val notesStyle = MaterialTheme.typography.bodyLarge
+            InlineEditable(
+                value = task.notes.orEmpty(),
+                onSave = { notes: String -> onRename(task.id, task.title, notes) }.takeIf { textEditable },
+                singleLine = false,
+                textStyle = notesStyle,
+                allowBlank = true,
+                markdown = true,
+            ) { tap ->
+                NotesText(task.notes, notesStyle, tap, selectable = !textEditable)
             }
         }
 
@@ -2464,13 +2468,22 @@ private fun TaskDetail(
                             enabled = editable,
                             size = 18.dp,
                         )
-                        Text(
-                            item.title,
-                            style = MaterialTheme.typography.bodyMedium,
-                            textDecoration = if (item.done) TextDecoration.LineThrough else null,
-                            color = if (item.done) muted else Color.Unspecified,
+                        val itemStyle = MaterialTheme.typography.bodyMedium
+                        InlineEditable(
+                            value = item.title,
+                            onSave = { title: String -> onRenameChecklistItem(item.id, title) }.takeIf { editable },
+                            singleLine = true,
+                            textStyle = itemStyle,
                             modifier = Modifier.weight(1f),
-                        )
+                        ) { tap ->
+                            Text(
+                                item.title,
+                                style = itemStyle,
+                                textDecoration = if (item.done) TextDecoration.LineThrough else null,
+                                color = if (item.done) muted else Color.Unspecified,
+                                modifier = tap,
+                            )
+                        }
                         if (editable) {
                             IconButton(onClick = { onDeleteChecklistItem(item.id) }) {
                                 Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.delete_item), Modifier.size(18.dp), tint = muted)
@@ -2517,7 +2530,113 @@ private fun TaskDetail(
             onWhen = { onReschedule(task.id) }.takeIf { library.canReschedule(task) && task.isOpen },
             onDeadline = { onDeadline(task.id) }.takeIf { library.canSetDeadline(task) && task.isOpen },
             onPlace = { onMove(task.id) }.takeIf { library.canMove(task) },
+            // A reminder needs a day, as in the form.
+            onReminder = { onReminder(task.id) }.takeIf { task.type == TaskType.TODO && library.canReschedule(task) && task.isOpen && task.startDate != null },
         )
+    }
+}
+
+/**
+ * Text that a tap turns into a field, when [onSave] is set; [display] draws it, with the tap
+ * modifier it is given. The change is saved on the keyboard's Done (one line), when the field
+ * loses focus, or when it leaves the screen (the sheet closed); a blank title is not saved.
+ * [withEmoji] adds the emoji picker that leads a title; [markdown] styles notes as they are typed.
+ */
+@Composable
+private fun InlineEditable(
+    value: String,
+    onSave: ((String) -> Unit)?,
+    singleLine: Boolean,
+    textStyle: androidx.compose.ui.text.TextStyle,
+    modifier: Modifier = Modifier,
+    allowBlank: Boolean = false,
+    withEmoji: Boolean = false,
+    markdown: Boolean = false,
+    display: @Composable (tap: Modifier) -> Unit,
+) {
+    var editing by rememberSaveable(value) { mutableStateOf(false) }
+    if (!editing || onSave == null) {
+        Box(modifier) { display(if (onSave != null) Modifier.clickable(onClickLabel = stringResource(R.string.edit)) { editing = true } else Modifier) }
+        return
+    }
+    var text by rememberSaveable(value) { mutableStateOf(value) }
+    var pickingEmoji by remember { mutableStateOf(false) }
+    // Saved once per edit, whichever of Done, focus loss or leaving comes first.
+    val saved = remember { booleanArrayOf(false) }
+    val latest by rememberUpdatedState(text)
+    val save by rememberUpdatedState(onSave)
+    fun commit() {
+        if (saved[0]) return
+        saved[0] = true
+        val changed = latest.trim() != value.trim()
+        if (changed && (allowBlank || latest.isNotBlank())) save(latest)
+        editing = false
+    }
+    DisposableEffect(Unit) { onDispose { commit() } }
+    val focus = remember { FocusRequester() }
+    var focused by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    if (pickingEmoji) {
+        EmojiDialog(
+            current = TitleEmoji.leading(text),
+            onPick = {
+                pickingEmoji = false
+                text = TitleEmoji.apply(text, it)
+                commit()
+            },
+            onDismiss = {
+                pickingEmoji = false
+                commit()
+            },
+        )
+    }
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.foundation.text.BasicTextField(
+            value = text,
+            onValueChange = { text = it },
+            singleLine = singleLine,
+            textStyle = textStyle.copy(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+            visualTransformation = if (markdown) MarkdownTransformation(markdownColors()) else VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = if (singleLine) ImeAction.Done else ImeAction.Default),
+            keyboardActions = KeyboardActions(onDone = { commit() }),
+            modifier = Modifier.weight(1f).focusRequester(focus).onFocusChanged {
+                // The emoji picker takes the focus away: its choice saves instead.
+                if (it.isFocused) focused = true else if (focused && !pickingEmoji) commit()
+            },
+        )
+        if (withEmoji) {
+            IconButton(onClick = { pickingEmoji = true }) { Text(TitleEmoji.leading(text) ?: "☺", fontSize = 20.sp) }
+        }
+    }
+}
+
+/** A to-do's notes in Markdown, links included (an Obsidian link without the app shows a short message); "No notes" when empty. */
+@Composable
+private fun NotesText(notes: String?, style: androidx.compose.ui.text.TextStyle, modifier: Modifier, selectable: Boolean) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    if (notes.isNullOrBlank()) {
+        Text(stringResource(R.string.no_notes), modifier, style = style, color = muted)
+        return
+    }
+    val colors = markdownColors()
+    val context = LocalContext.current
+    val noApp = stringResource(R.string.link_no_app)
+    val links = remember(context, noApp) {
+        object : UriHandler {
+            override fun openUri(uri: String) {
+                try {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)))
+                } catch (_: ActivityNotFoundException) {
+                    Toast.makeText(context, noApp, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+    CompositionLocalProvider(LocalUriHandler provides links) {
+        val text = @Composable { Text(remember(notes, colors) { markdown(notes, colors, clickableLinks = true) }, modifier.fillMaxWidth(), style = style) }
+        // Notes that can't be edited can still be selected to copy; editable ones are copied from their field.
+        if (selectable) SelectionContainer { text() } else text()
     }
 }
 
@@ -2549,20 +2668,32 @@ private fun DetailFacts(
     onWhen: (() -> Unit)? = null,
     onDeadline: (() -> Unit)? = null,
     onPlace: (() -> Unit)? = null,
+    onReminder: (() -> Unit)? = null,
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         val (whenKind, whenLabel) = whenFact(task)
         Fact({ ListIcon(whenKind, size = 18.dp) }, whenLabel, onClick = onWhen, clickLabel = stringResource(R.string.reschedule))
-        task.reminder?.let { Fact({ Icon(Icons.Filled.Notifications, null, Modifier.size(18.dp), tint = muted) }, it.format(timeFormat)) }
+        // Reminder and deadline: shown when set, offered in grey when they can be.
+        val reminder = task.reminder
+        if (reminder != null || onReminder != null) {
+            Fact(
+                { Icon(Icons.Filled.Notifications, null, Modifier.size(18.dp), tint = muted) },
+                reminder?.format(timeFormat) ?: stringResource(R.string.add_reminder),
+                color = if (reminder == null) muted else Color.Unspecified,
+                onClick = onReminder,
+                clickLabel = stringResource(R.string.reminder),
+            )
+        }
         library.repeatRule(task)?.let { rule ->
             Fact({ RepeatGlyph(muted, size = 18.dp) }, describeRepeat(LocalContext.current, rule))
         }
-        task.deadline?.let {
+        val deadline = task.deadline
+        if (deadline != null || onDeadline != null) {
             Fact(
                 { DeadlineFlag(size = 16.dp) },
-                stringResource(R.string.due_date, it.format(dateFormat)),
-                ListColors.deadline,
+                deadline?.let { stringResource(R.string.due_date, it.format(dateFormat)) } ?: stringResource(R.string.add_deadline),
+                if (deadline != null) ListColors.deadline else muted,
                 onClick = onDeadline,
                 clickLabel = stringResource(R.string.deadline),
             )

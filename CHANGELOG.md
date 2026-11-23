@@ -11,6 +11,10 @@ All notable changes to Tandem Task are listed here. The format follows [Keep a C
 - **Search in the pickers.** The filters' tags and project or area, and the place picker (Move, a new to-do's place), each have a search field: type part of a name, accents and case aside. A heading is found with its project's name.
 - **New to-do where you are.** In a project, each section and each heading ends with a "New to-do" row: the form opens with the to-do filed there, under that heading. An area's list ends with one too.
 
+### Changed
+
+- **No more Edit button: change things in place.** In a to-do's sheet, a tap on the title, the notes or a checklist item turns it into a field; Done, a tap elsewhere or closing the sheet saves it. The emoji picker sits next to the title being edited. The reminder (when the to-do has a day) and the deadline show in grey when unset, and a tap sets them; the reminder's picker can also remove it. A project's title and notes change the same way in its header, which now shows the notes, and its ⋯ menu adds a deadline.
+
 ## [0.5.4] - 2026-11-21
 
 ### Added
