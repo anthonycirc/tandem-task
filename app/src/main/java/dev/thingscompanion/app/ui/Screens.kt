@@ -982,7 +982,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                         header = {
                             Column {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(Modifier.weight(1f)) { ListHeader(ListKind.AREA, openArea.title) }
+                                    Box(Modifier.weight(1f)) { ListHeader(ListKind.AREA, openArea.title, count = library.areaTasks(openArea.id).size) }
                                     IconButton(onClick = {
                                         naming = NameRequest(R.string.rename_area, openArea.title) { viewModel.renameArea(openArea.id, it) }
                                     }) { Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.rename_area)) }
@@ -1095,7 +1095,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             }
                             TaskList(
                                 library = library,
-                                header = { ListHeader(tab.kind, title) },
+                                header = { ListHeader(tab.kind, title, count = tasks.count { it.isOpen && it.type == TaskType.TODO }) },
                                 groups = groups,
                                 emptyText = stringResource(R.string.nothing_here),
                                 actions = rowActions,
@@ -1625,14 +1625,35 @@ private sealed interface Group {
     data object Overdue : Group
 }
 
-/** The list's icon and name in large type, as Things opens each list. */
+/** The list's icon and name in large type, as Things opens each list; [count] open to-dos after it, when there are any. */
 @Composable
-private fun ListHeader(kind: ListKind, title: String) {
+private fun ListHeader(kind: ListKind, title: String, count: Int? = null) {
     Row(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         ListIcon(kind, size = 28.dp)
         Spacer(Modifier.width(10.dp))
-        Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(
+            title,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        OpenCount(count)
     }
+}
+
+/** How many open to-dos a list or project holds, in grey after its name; nothing when there are none. */
+@Composable
+private fun OpenCount(count: Int?) {
+    if (count == null || count <= 0) return
+    val label = pluralStringResource(R.plurals.open_todos_count, count, count)
+    Text(
+        count.toString(),
+        Modifier.padding(start = 10.dp).semantics { contentDescription = label },
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
@@ -2179,8 +2200,10 @@ private fun ProjectHeader(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 textDecoration = if (project.isOpen) null else TextDecoration.LineThrough,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f, fill = false),
             )
+            OpenCount(library.projectTasks(project.id).size)
+            Spacer(Modifier.weight(1f))
             if (editable) {
                 IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.edit)) }
                 Box {

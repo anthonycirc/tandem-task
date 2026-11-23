@@ -2,6 +2,12 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Counts in the headers.** Today and the other lists, a project and an area show how many open to-dos they hold next to their name; so does the widget's header, next to the list's name.
+
 ## [0.5.4] - 2026-11-21
 
 ### Added

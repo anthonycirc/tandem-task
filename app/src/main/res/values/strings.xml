@@ -281,4 +281,8 @@
     <string name="widget_green">Green %1$d</string>
     <string name="widget_blue">Blue %1$d</string>
     <string name="widget_hex">Hex colour</string>
+    <plurals name="open_todos_count">
+        <item quantity="one">%d open to-do</item>
+        <item quantity="other">%d open to-dos</item>
+    </plurals>
 </resources>

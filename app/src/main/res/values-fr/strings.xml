@@ -285,4 +285,8 @@
     <string name="widget_green">Vert %1$d</string>
     <string name="widget_blue">Bleu %1$d</string>
     <string name="widget_hex">Couleur hexadécimale</string>
+    <plurals name="open_todos_count">
+        <item quantity="one">%d to-do ouverte</item>
+        <item quantity="other">%d to-dos ouvertes</item>
+    </plurals>
 </resources>
