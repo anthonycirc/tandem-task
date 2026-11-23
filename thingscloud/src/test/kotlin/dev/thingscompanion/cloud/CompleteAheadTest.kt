@@ -132,6 +132,7 @@ class CompleteAheadTest {
             assertFalse(lib.canCompleteAhead(lib.repeatsAhead(today).first()))
             assertFailsWith<IllegalArgumentException> { build(lib) }
         }
+        assertFalse(after.canCompleteAhead(after.task("tmpl")!!.copy(startDate = dec1)))
         assertFailsWith<IllegalArgumentException> { build(after) }
     }
 
@@ -140,6 +141,9 @@ class CompleteAheadTest {
         // Daily, so without the rule every day of the next four weeks would show.
         val lead = library(rr = rr().replace("\"ts\": 0", "\"ts\": -15").replace("\"fu\": 8", "\"fu\": 16"))
         assertEquals(listOf(dec1), lead.repeatsAhead(today).map { it.startDate })
+        // Ended before that day: nothing ahead.
+        val ended = library(rr = rr().replace("\"ts\": 0", "\"ts\": -15").replace("\"ed\": 64092211200", "\"ed\": ${s(LocalDate.of(2026, 11, 30))}"))
+        assertEquals(emptyList(), ended.repeatsAhead(today))
     }
 
     @Test

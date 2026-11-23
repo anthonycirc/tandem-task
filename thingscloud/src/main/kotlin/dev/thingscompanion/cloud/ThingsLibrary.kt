@@ -221,7 +221,10 @@ class ThingsLibrary private constructor(
                 if (rule.afterCompletion && mine.any { it.isOpen }) return@flatMap emptyList()
                 val taken = mine.mapNotNull { it.startDate }.toSet()
                 // With a deadline lead the rule's days are deadlines, not starts: only the next start is known.
-                if (rule.leadDays != 0) return@flatMap listOfNotNull(template.copy(startDate = first).takeIf { first !in mine.mapNotNull { it.startDate } })
+                if (rule.leadDays != 0) {
+                    val ended = rule.endDate != null && first.isAfter(rule.endDate)
+                    return@flatMap listOfNotNull(template.copy(startDate = first).takeIf { !ended && first !in mine.mapNotNull { it.startDate } })
+                }
                 val days = generateSequence(first) { day -> rule.nextAfter(day)?.takeIf { it.isAfter(day) } }
                     .takeWhile { it == first || !it.isAfter(horizon) }
                     .takeWhile { rule.endDate == null || !it.isAfter(rule.endDate) }
