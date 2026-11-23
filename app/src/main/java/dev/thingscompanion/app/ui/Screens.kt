@@ -835,7 +835,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                         IconButton(onClick = { selectionWhen = true }, enabled = picked.any { library.canReschedule(it) && it.isOpen }) {
                             Icon(Icons.Filled.DateRange, contentDescription = stringResource(R.string.reschedule))
                         }
-                        IconButton(onClick = { selectionMove = true }, enabled = any && picked.any(library::canMove)) {
+                        IconButton(onClick = { selectionMove = true }, enabled = any && picked.any(library::canMoveInSelection)) {
                             Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.move))
                         }
                         IconButton(onClick = {
