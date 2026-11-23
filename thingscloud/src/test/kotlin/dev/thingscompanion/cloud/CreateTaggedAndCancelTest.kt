@@ -78,8 +78,8 @@ class CreateTaggedAndCancelTest {
     }
 
     @Test
-    fun `an after completion occurrence is refused, its template would have to move on`() {
-        assertFailsWith<IllegalArgumentException> { PendingChange.SetCancelled("op", "occ", true).build(library, now) }
+    fun `an after completion occurrence is cancelled with its template moved on (see RepeatCompleteTest)`() {
+        assertEquals(setOf("occ", "tmpl"), PendingChange.SetCancelled("op", "occ", true).build(library, now)!!.keys)
     }
 
     @Test

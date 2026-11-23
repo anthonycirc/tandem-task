@@ -1370,8 +1370,8 @@ private fun TodoCheckbox(
     size: androidx.compose.ui.unit.Dp = 22.dp,
 ) {
     val canCheck = library.canComplete(task)
-    // Cancelling an "after completion" repeat would have to move its template on: left to Things.
-    val canCancel = canCheck && library.afterCompletionRule(task) == null
+    // A long press cancels, repeats included ("after completion" ones move their template on, as checking them does).
+    val canCancel = canCheck
     val cancelled = task.status == TaskStatus.CANCELLED
     var menu by remember { mutableStateOf(false) }
     Box {

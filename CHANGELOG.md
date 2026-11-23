@@ -15,6 +15,7 @@ All notable changes to Tandem Task are listed here. The format follows [Keep a C
 ### Changed
 
 - **No more Edit button: change things in place.** In a to-do's sheet, a tap on the title, the notes or a checklist item turns it into a field; Done, a tap elsewhere or closing the sheet saves it. The emoji picker sits next to the title being edited. The reminder (when the to-do has a day) and the deadline show in grey when unset, and a tap sets them; the reminder's picker can also remove it. A project's title and notes change the same way in its header, which now shows the notes, and its ⋯ menu adds a deadline.
+- **Cancel any repeating to-do.** A long press on the checkbox now cancels "after completion" repeats too: the next one is set from the day of the cancel, as Things does when one is cancelled on the Mac or the iPhone. Undo is not offered for these, since their next one is already set; reopen it in Things if needed.
 
 ## [0.5.4] - 2026-11-21
 

@@ -375,13 +375,18 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Cancels a to-do (or reopens a cancelled one), as a long press on its checkbox does in Things; the snackbar offers Undo. */
     fun setCancelled(id: String, cancelled: Boolean) {
-        val task = _state.value.library?.task(id) ?: return
+        val library = _state.value.library ?: return
+        val task = library.task(id) ?: return
         val undo = when (task.status) {
             TaskStatus.COMPLETED -> PendingChange.SetDone(newId(), id, true)
             TaskStatus.CANCELLED -> PendingChange.SetCancelled(newId(), id, true)
             TaskStatus.OPEN -> PendingChange.SetCancelled(newId(), id, false)
-        }
-        change(PendingChange.SetCancelled(newId(), id, cancelled), if (cancelled) R.string.marked_cancelled else R.string.marked_open, undo = undo)
+        }.takeIf { library.afterCompletionRule(task) == null } // Its template moved on: reopening it is left to Things.
+        change(
+            PendingChange.SetCancelled(newId(), id, cancelled, day = ThingsDay.today().toEpochDay()),
+            if (cancelled) R.string.marked_cancelled else R.string.marked_open,
+            undo = undo,
+        )
     }
 
     /** Swipe to reschedule: the to-do's own title and notes, a new When; the reminder stays when there is still a day. */
