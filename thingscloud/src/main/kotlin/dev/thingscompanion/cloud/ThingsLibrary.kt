@@ -52,6 +52,8 @@ data class Task(
     val modifiedAt: Double? = null,
     /** For a template: the day of its next occurrence, not created yet (`tir`). */
     val nextOccurrence: LocalDate? = null,
+    /** For a template: how many occurrences Things made of it (`icc`). */
+    val instanceCount: Int? = null,
     internal val entity: String?,
 ) {
     val isOpen get() = status == TaskStatus.OPEN
@@ -214,6 +216,8 @@ class ThingsLibrary private constructor(
                 val mine = instances.filter { template.id in it.recurrenceTemplateIds }
                 if (rule.afterCompletion && mine.any { it.isOpen }) return@flatMap emptyList()
                 val taken = mine.mapNotNull { it.startDate }.toSet()
+                // With a deadline lead the rule's days are deadlines, not starts: only the next start is known.
+                if (rule.leadDays != 0) return@flatMap listOfNotNull(template.copy(startDate = first).takeIf { first !in mine.mapNotNull { it.startDate } })
                 val days = generateSequence(first) { day -> rule.nextAfter(day)?.takeIf { it.isAfter(day) } }
                     .takeWhile { it == first || !it.isAfter(horizon) }
                     .takeWhile { rule.endDate == null || !it.isAfter(rule.endDate) }
@@ -221,6 +225,21 @@ class ThingsLibrary private constructor(
                 days.filter { it !in taken }.map { template.copy(startDate = it) }.toList()
             }
             .sortedWith(compareBy<Task>({ it.startDate }, { it.index }, { it.id }))
+    }
+
+    /**
+     * Whether a coming occurrence from [repeatsAhead] can be checked before Things creates it, as
+     * Things 3.23+ does: the template's next one only, on a fixed schedule with no deadline lead,
+     * no deadline and no checklist (the writes seen in the history; the others are left to Things).
+     */
+    fun canCompleteAhead(occurrence: Task): Boolean {
+        val template = tasks[occurrence.id]?.takeIf { it.isRecurrenceTemplate } ?: return false
+        val day = occurrence.startDate ?: return false
+        val rule = repeatRule(template) ?: return false
+        return template.isTodo && template.isOpen && !template.trashed && !template.inTrashedContainer && template.isCurrentEntity &&
+            !rule.afterCompletion && rule.leadDays == 0 && template.deadline == null && checklist(template.id).isEmpty() &&
+            day == template.nextOccurrence && rule.nextAfter(day)?.isAfter(day) == true &&
+            instancesOf(template.id).none { it.startDate == day && !it.trashed }
     }
 
     /** What Things counts next to its lists (open items only). */
@@ -493,6 +512,7 @@ class ThingsLibrary private constructor(
                     repeatRuleJson = p["rr"] as? JsonObject,
                     modifiedAt = p["md"].primitiveOrNull()?.doubleOrNull,
                     nextOccurrence = p.day("tir"),
+                    instanceCount = p.int("icc"),
                     entity = obj.entity,
                 )
             }

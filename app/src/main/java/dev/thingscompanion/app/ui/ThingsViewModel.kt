@@ -389,6 +389,13 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
+    /**
+     * A repeat's coming occurrence checked in Upcoming: Things gets a completed copy on that day and
+     * the repeat moves on. No Undo: the copy can be unchecked like any occurrence.
+     */
+    fun completeAhead(templateId: String, day: LocalDate) =
+        change(PendingChange.CompleteAhead(newId(), templateId, day.toEpochDay(), newId()), R.string.marked_done)
+
     /** Swipe to reschedule: the to-do's own title and notes, a new When; the reminder stays when there is still a day. */
     fun reschedule(id: String, schedule: Schedule) {
         val task = _state.value.library?.task(id) ?: return

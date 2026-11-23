@@ -30,6 +30,8 @@ data class RepeatRule(
     val month: Month? = null,
     val endDate: LocalDate? = null,
     val weekdayOrdinal: Int? = null,
+    /** `ts`: with a deadline, the rule's days are deadlines and each to-do starts this many days before (-15: 15 days before). */
+    val leadDays: Int = 0,
 ) {
     /**
      * The `rr` for this rule, starting on [start]: the inverse of [parse]. [anchor] is `ia`,
@@ -134,6 +136,7 @@ data class RepeatRule(
                 month = if (unit == RepeatUnit.YEAR) first?.int("mo")?.takeIf { it in 0..11 }?.let { Month.of(it + 1) } else null,
                 endDate = end,
                 weekdayOrdinal = first?.int("wdo").takeIf { unit == RepeatUnit.MONTH || unit == RepeatUnit.YEAR },
+                leadDays = rr.int("ts") ?: 0,
             )
         }
     }

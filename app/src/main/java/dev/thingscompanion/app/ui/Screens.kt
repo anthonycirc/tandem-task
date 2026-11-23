@@ -658,6 +658,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
         onRestore = viewModel::restore,
         onReschedule = { schedulingId = it.id },
         onSetCancelled = viewModel::setCancelled,
+        onCompleteAhead = { occurrence -> occurrence.startDate?.let { viewModel.completeAhead(occurrence.id, it) } },
     )
     val scheduling = schedulingId?.let { library?.task(it) }
     if (scheduling != null) {
@@ -1355,6 +1356,8 @@ private class RowActions(
     val onRestore: (String) -> Unit,
     val onReschedule: (Task) -> Unit,
     val onSetCancelled: (String, Boolean) -> Unit = { _, _ -> },
+    /** A repeat's coming occurrence in Upcoming (its template, dated) checked before Things created it. */
+    val onCompleteAhead: (Task) -> Unit = {},
 )
 
 /**
@@ -2003,6 +2006,13 @@ private fun TaskRow(library: ThingsLibrary, task: Task, actions: RowActions, sho
         val selected = actions.selected
         if (selected != null) {
             SelectionMark(task.id in selected)
+        } else if (ahead) {
+            // Checked ahead as in Things 3.23: the next occurrence only, the following ones once it is done.
+            ThingsCheckbox(
+                checked = false,
+                onCheckedChange = { if (it) actions.onCompleteAhead(task) },
+                enabled = library.canCompleteAhead(task),
+            )
         } else {
             TodoCheckbox(library, task, actions.onSetDone, actions.onSetCancelled)
         }

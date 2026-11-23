@@ -223,6 +223,25 @@ sealed interface PendingChange {
         }
     }
 
+    /**
+     * A repeating to-do's coming occurrence checked in Upcoming before Things created it, as Things 3.23+
+     * does: a completed copy of the template on [day] (epoch day), [copyId], and the template moved on.
+     */
+    @Serializable
+    @SerialName("complete_ahead")
+    data class CompleteAhead(override val opId: String, val templateId: String, val day: Long, val copyId: String) : PendingChange {
+        override val replaces get() = "ahead:$templateId:$day"
+
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            if (library.task(copyId) != null) return null
+            val template = library.task(templateId) ?: throw NoSuchElementException("The repeating to-do no longer exists.")
+            val on = LocalDate.ofEpochDay(day)
+            require(library.canCompleteAhead(template.copy(startDate = on))) { "This occurrence can't be checked ahead from the app." }
+            val next = requireNotNull(library.repeatRule(template)?.nextAfter(on))
+            return TaskEdits.completeAhead(template, on, next, copyId, now)
+        }
+    }
+
     /** A project completed, cancelled or reopened; closing it closes its open to-dos and headings too. */
     @Serializable
     @SerialName("project_status")

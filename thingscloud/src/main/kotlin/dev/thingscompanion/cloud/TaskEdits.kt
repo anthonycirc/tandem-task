@@ -79,6 +79,45 @@ object TaskEdits {
         }
     }
 
+    /**
+     * What Things 3.23+ writes when a repeating to-do's coming occurrence is checked before it was
+     * created (seen 2026-09/10 in the account's history): a new to-do copied from the template, dated
+     * [on] (`sr`, `tir`, `st` 2), already completed (`ss` 3, `sp`), `lt` true, `rt` the template; and
+     * on the template one more copy made (`icc`), the next creation the day after (`icsd`) and the
+     * next occurrence, [next] (`tir`), without `md`.
+     */
+    fun completeAhead(template: Task, on: LocalDate, next: LocalDate, copyId: String, now: Double): Map<String, JsonObject> {
+        val base = InboxTask.payload(
+            template.title, template.notes.orEmpty(), template.index, now, Schedule.OnDate(on), template.reminder,
+            projectId = template.projectId.takeIf { template.headingId == null },
+            areaId = template.areaId.takeIf { template.projectId == null && template.headingId == null },
+            headingId = template.headingId,
+            tagIds = template.tagIds,
+        )
+        val props = (base["p"] as JsonObject).toMutableMap()
+        props["lt"] = JsonPrimitive(true)
+        props["ss"] = JsonPrimitive(3)
+        props["sp"] = InboxTask.plainNumber(now)
+        props["rt"] = JsonArray(listOf(JsonPrimitive(template.id)))
+        props["ti"] = JsonPrimitive(template.todayIndex)
+        fun midnight(date: LocalDate) = JsonPrimitive(date.toEpochDay() * InboxTask.SECONDS_PER_DAY)
+        val copy = buildJsonObject {
+            put("t", 0)
+            put("e", "Task7")
+            put("p", JsonObject(props))
+        }
+        val moved = buildJsonObject {
+            put("t", 1)
+            put("e", template.entity)
+            put("p", buildJsonObject {
+                put("icc", (template.instanceCount ?: 0) + 1)
+                put("icsd", midnight(on.plusDays(1)))
+                put("tir", midnight(next))
+            })
+        }
+        return mapOf(copyId to copy, template.id to moved)
+    }
+
     /** An "after completion" template once its occurrence is restored from the Trash: no dates, as Things writes it. */
     fun clearAfterCompletion(template: Task): JsonObject = buildJsonObject {
         put("t", 1)
