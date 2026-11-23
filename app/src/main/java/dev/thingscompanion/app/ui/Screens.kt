@@ -305,6 +305,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     // Where a new to-do goes: the project or area it is added from, or one picked in the form.
     var placeProjectId by rememberSaveable { mutableStateOf<String?>(null) }
     var placeAreaId by rememberSaveable { mutableStateOf<String?>(null) }
+    // A heading of that project, when added from its "New to-do" row.
+    var placeHeadingId by rememberSaveable { mutableStateOf<String?>(null) }
     var pickingPlace by remember { mutableStateOf(false) }
     // Tags picked for a new to-do or project, sent with its creation.
     var newTagIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
@@ -312,9 +314,10 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     // Title and notes a new to-do starts with: what another app shared, or nothing.
     var addTitle by rememberSaveable { mutableStateOf("") }
     var addNotes by rememberSaveable { mutableStateOf("") }
-    fun startAdding(shared: Sharing.Draft? = null) {
+    fun startAdding(shared: Sharing.Draft? = null, headingId: String? = null) {
         placeProjectId = projectId?.takeIf { library?.task(it) != null }
         placeAreaId = areaId?.takeIf { placeProjectId == null && library?.area(it) != null }
+        placeHeadingId = headingId?.takeIf { placeProjectId != null && library?.task(it)?.projectId == placeProjectId }
         newTagIds = emptyList()
         addTitle = shared?.title.orEmpty()
         addNotes = shared?.notes.orEmpty()
@@ -348,6 +351,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     // Added from a project or an area, the to-do is filed there.
     val addInProject = placeProjectId?.takeIf { library?.task(it) != null }
     val addInArea = placeAreaId?.takeIf { addInProject == null && library?.area(it) != null }
+    val addUnderHeading = placeHeadingId?.takeIf { addInProject != null && library?.task(it)?.projectId == addInProject }
     if (adding) {
         val filed = addInProject != null || addInArea != null
         if (pickingPlace && library != null) {
@@ -365,6 +369,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                     pickingPlace = false
                     placeProjectId = it.projectId
                     placeAreaId = it.areaId
+                    placeHeadingId = null
                 },
                 onDismiss = { pickingPlace = false },
             )
@@ -386,7 +391,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
             allowChecklist = true,
             allowDeadline = true,
             place = when {
-                addInProject != null -> ListKind.PROJECT to library?.task(addInProject)?.title.orEmpty()
+                addInProject != null -> ListKind.PROJECT to listOfNotNull(library?.task(addInProject)?.title, addUnderHeading?.let { library?.task(it)?.title }).joinToString(" › ")
                 addInArea != null -> ListKind.AREA to library?.area(addInArea)?.title.orEmpty()
                 else -> ListKind.INBOX to stringResource(R.string.list_inbox)
             },
@@ -397,7 +402,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                 adding = false
                 // A to-do filed in a project or area is never in the Inbox.
                 val filedSchedule = if (filed && schedule == Schedule.Inbox) Schedule.Anytime else schedule
-                viewModel.addTask(title, notes, filedSchedule, reminder, checklist, deadline, projectId = addInProject, areaId = addInArea, tagIds = newTagIds)
+                viewModel.addTask(title, notes, filedSchedule, reminder, checklist, deadline, projectId = addInProject, areaId = addInArea, tagIds = newTagIds, headingId = addUnderHeading)
             },
             onDismiss = { adding = false },
         )
@@ -955,6 +960,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             .filter { (group, tasks) -> filter.isEmpty || group !is Group.Heading || tasks.isNotEmpty() },
                         emptyText = stringResource(R.string.no_open_todos),
                         actions = rowActions,
+                        // A "New to-do" row ends each section, filing the to-do under its heading.
+                        onAdd = { group: Group -> startAdding(headingId = (group as? Group.Heading)?.id) }.takeIf { library.canEditProject(openProject) && selection == null },
                         onHeading = { heading ->
                             // Deleting a heading moves it to the Trash with its to-dos, as its swipe does.
                             val canDelete = library.task(heading.id)?.let(library::canTrash) == true
@@ -1000,6 +1007,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                         groups = listOf(Group.None to filter.apply(library.areaTasks(openArea.id, closedOn = today))),
                         emptyText = "",
                         actions = rowActions,
+                        onAdd = { _: Group -> startAdding() }.takeIf { selection == null },
                         onDrop = { task: Task, _: Group, order: List<String> -> viewModel.reorder(task.id, order, "area:${openArea.id}") }.takeIf { filter.isEmpty },
                     )
                 }
@@ -1746,6 +1754,9 @@ private data class TaskItemRow(val task: Task) : ListRow {
     override val key get() = task.id
 }
 
+/** The "New to-do" row ending a section. */
+private data class AddRow(val group: Group, override val key: String) : ListRow
+
 /**
  * A list of to-dos in sections. With [onDrop], a long press lifts a to-do to drag it: dropped, it
  * reports its section and that section's new order. With [onHeadingsDrop], headings are dragged
@@ -1763,14 +1774,19 @@ private fun TaskList(
     onDrop: ((task: Task, section: Group, order: List<String>) -> Unit)? = null,
     onHeadingsDrop: ((headingId: String, order: List<String>) -> Unit)? = null,
     canDrag: (Task) -> Boolean = { true },
+    /** With it, each section ends with a "New to-do" row adding there. */
+    onAdd: ((Group) -> Unit)? = null,
 ) {
-    val built = remember(groups) {
+    val adding = onAdd != null
+    val built = remember(groups, adding) {
         groups.withIndex().flatMap { (index, entry) ->
             val (group, tasks) = entry
+            val id = (group as? Group.Heading)?.id ?: index.toString()
+            val add = if (adding) listOf(AddRow(group, "add-$id")) else emptyList()
             // A heading shows even when empty, as in Things; so does This Evening when project groups follow it.
             val keep = group is Group.Heading || (group == Group.Evening && groups.getOrNull(index + 1)?.first is Group.Place)
-            if (tasks.isEmpty() && !keep) emptyList()
-            else listOf(HeaderRow(group, "group-" + ((group as? Group.Heading)?.id ?: index.toString()))) + tasks.map(::TaskItemRow)
+            if (tasks.isEmpty() && !keep) add
+            else listOf(HeaderRow(group, "group-$id")) + tasks.map(::TaskItemRow) + add
         }
     }
     // The rows as dragged; rebuilt from the lists whenever they change.
@@ -1789,19 +1805,21 @@ private fun TaskList(
             is TaskItemRow -> {
                 val headerIndex = (index downTo 0).first { rows[it] is HeaderRow }
                 val section = (rows[headerIndex] as HeaderRow).group
-                val order = rows.drop(headerIndex + 1).takeWhile { it is TaskItemRow }.map { it.key }
+                // The section's to-dos up to the next header; its "New to-do" row may sit among them mid-drag.
+                val order = rows.drop(headerIndex + 1).takeWhile { it !is HeaderRow }.filterIsInstance<TaskItemRow>().map { it.key }
                 onDrop?.invoke(row.task, section, order)
             }
             is HeaderRow -> {
                 val heading = row.group as? Group.Heading ?: return
                 onHeadingsDrop?.invoke(heading.id, rows.mapNotNull { ((it as? HeaderRow)?.group as? Group.Heading)?.id })
             }
-            null -> Unit
+            is AddRow, null -> Unit
         }
     }
     fun draggable(row: ListRow) = actions.selected == null && when (row) {
         is TaskItemRow -> onDrop != null && row.task.isOpen && library.canReorder(row.task) && canDrag(row.task)
         is HeaderRow -> onHeadingsDrop != null && row.group is Group.Heading
+        is AddRow -> false
     }
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         item(key = "header") { header() }
@@ -1828,6 +1846,7 @@ private fun TaskList(
                                 Box(Modifier.background(MaterialTheme.colorScheme.surface)) { GroupHeader(row.group, onHeading) }
                             }
                         }
+                        is AddRow -> NewTodoRow { onAdd?.invoke(row.group) }
                         is TaskItemRow -> {
                             val task = row.task
                             SwipeActions(
@@ -1845,6 +1864,20 @@ private fun TaskList(
         }
         // Room for the add button over the last row.
         item(key = "footer") { Spacer(Modifier.height(88.dp)) }
+    }
+}
+
+/** "+ New to-do" in grey at the end of a section, where the to-do will be added. */
+@Composable
+private fun NewTodoRow(onClick: () -> Unit) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick).padding(start = 20.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.Add, contentDescription = null, Modifier.size(18.dp), tint = ListColors.checked)
+        Spacer(Modifier.width(14.dp))
+        Text(stringResource(R.string.new_todo_title), style = MaterialTheme.typography.bodyMedium, color = muted)
     }
 }
 

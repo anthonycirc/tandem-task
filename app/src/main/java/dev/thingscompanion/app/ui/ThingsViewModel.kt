@@ -252,10 +252,11 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         projectId: String? = null,
         areaId: String? = null,
         tagIds: List<String> = emptyList(),
+        headingId: String? = null,
     ) {
         val taskId = newId()
         change(
-            PendingChange.AddTask(newId(), taskId, title, notes, PendingChange.When.of(schedule), reminder?.toSecondOfDay(), projectId = projectId, areaId = areaId, tagIds = tagIds),
+            PendingChange.AddTask(newId(), taskId, title, notes, PendingChange.When.of(schedule), reminder?.toSecondOfDay(), projectId = projectId, headingId = headingId, areaId = areaId, tagIds = tagIds),
             // Name the Inbox when that is where it went; elsewhere (Today, a date…) just confirm.
             done = if (schedule == Schedule.Inbox) R.string.added_to_inbox else R.string.added,
         )
