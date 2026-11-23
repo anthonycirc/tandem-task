@@ -520,7 +520,7 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         val onlyProjects = ids.all { library.task(it)?.type == TaskType.PROJECT }
         changeAll(
             ids.mapNotNull { id ->
-                val item = library.task(id)?.takeIf(library::canMove) ?: return@mapNotNull null
+                val item = library.task(id)?.takeIf(library::canMoveInSelection) ?: return@mapNotNull null
                 if (item.type == TaskType.PROJECT && !onlyProjects) return@mapNotNull null
                 val change = if (item.type == TaskType.PROJECT) {
                     // A project goes to an area or out of one; picked a project or heading, it stays.

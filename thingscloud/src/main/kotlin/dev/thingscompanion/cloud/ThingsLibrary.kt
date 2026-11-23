@@ -355,6 +355,9 @@ class ThingsLibrary private constructor(
     fun canMove(task: Task): Boolean =
         task.isTodo && !task.trashed && !task.isRecurrenceTemplate && task.repeatType == null && task.isCurrentEntity
 
+    /** What Move takes in a selection: to-dos the app may file ([canMove]) and projects it may move to an area ([canEditProject]). */
+    fun canMoveInSelection(task: Task): Boolean = canMove(task) || canEditProject(task)
+
     /** To-dos, projects and headings the app may reorder. */
     fun canReorder(task: Task): Boolean = !task.trashed && task.isCurrentEntity && !task.isRecurrenceTemplate
 

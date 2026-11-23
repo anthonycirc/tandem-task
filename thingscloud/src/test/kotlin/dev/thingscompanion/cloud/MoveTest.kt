@@ -9,7 +9,9 @@ import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class MoveTest {
 
@@ -71,5 +73,19 @@ class MoveTest {
         assertEquals(setOf("ar", "md"), out.keys)
         assertEquals(ids(), out["ar"])
         assertNull(PendingChange.MoveProject("op", "proj", "home").build(library(), now))
+    }
+
+    @Test
+    fun `a selection moves to-dos the app may file and projects it may edit, not repeating ones`() {
+        val lib = ThingsLibrary.from(HistoryState().apply {
+            apply(WireParser.parseItem(Json.parseToJsonElement(seed.trimEnd().removeSuffix("}") + """,
+                "repeatingProject": {"t": 0, "e": "Task7", "p": {"tt": "Sprint", "tp": 1, "st": 1, "rr": {"tp": 0, "fu": 256, "fa": 1}}}
+            }""") as JsonObject))
+        })
+        assertTrue(lib.canMoveInSelection(lib.task("proj")!!))
+        assertTrue(lib.canMoveInSelection(lib.task("inbox")!!))
+        assertFalse(lib.canMoveInSelection(lib.task("repeatingProject")!!))
+        assertFalse(lib.canMoveInSelection(lib.task("template")!!))
+        assertFalse(lib.canMoveInSelection(lib.task("head")!!))
     }
 }

@@ -835,7 +835,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                         IconButton(onClick = { selectionWhen = true }, enabled = picked.any { library.canReschedule(it) && it.isOpen }) {
                             Icon(Icons.Filled.DateRange, contentDescription = stringResource(R.string.reschedule))
                         }
-                        IconButton(onClick = { selectionMove = true }, enabled = any && picked.any(library::canMove)) {
+                        IconButton(onClick = { selectionMove = true }, enabled = any && picked.any(library::canMoveInSelection)) {
                             Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.move))
                         }
                         IconButton(onClick = {
@@ -1416,6 +1416,8 @@ private fun TodoCheckbox(
 @Composable
 private fun MoveDialog(library: ThingsLibrary, item: Task, onPick: (PendingChange.Destination) -> Unit, onDismiss: () -> Unit) {
     val current = when {
+        // A project is in its area, or in none.
+        item.type == TaskType.PROJECT -> PendingChange.Destination(areaId = item.areaId)
         item.headingId != null -> PendingChange.Destination(headingId = item.headingId)
         item.projectId != null -> PendingChange.Destination(projectId = item.projectId)
         item.areaId != null -> PendingChange.Destination(areaId = item.areaId)
@@ -1459,7 +1461,7 @@ private fun PlaceDialog(
     val entries = remember(library, isProject, current, headings) {
         buildList {
             if (isProject) {
-                add(Entry(null, noAreaLabel, 0, current?.areaId == null, PendingChange.Destination()))
+                add(Entry(null, noAreaLabel, 0, current != null && current.areaId == null, PendingChange.Destination()))
                 library.areas().forEach { area -> add(Entry(ListKind.AREA, area.title, 0, current?.areaId == area.id, PendingChange.Destination(areaId = area.id))) }
             } else {
                 add(Entry(ListKind.INBOX, inboxLabel, 0, current?.inbox == true, PendingChange.Destination(inbox = true)))
