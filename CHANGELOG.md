@@ -10,6 +10,7 @@ All notable changes to Tandem Task are listed here. The format follows [Keep a C
 - **Group by project.** A switch in the filters classes the to-dos of Today, the Inbox, Anytime and Someday by project, each group under its project's (or area's) name: to-dos in no project first, then the sidebar's order. Today keeps This Evening apart. Dragging to reorder is off while grouped.
 - **Search in the pickers.** The filters' tags and project or area, and the place picker (Move, a new to-do's place), each have a search field: type part of a name, accents and case aside. A heading is found with its project's name.
 - **New to-do where you are.** In a project, each section and each heading ends with a "New to-do" row: the form opens with the to-do filed there, under that heading. An area's list ends with one too.
+- **Repeating to-dos in Upcoming.** As in Things, Upcoming shows the coming occurrences of repeating to-dos before they are created, in grey on their days: the next one, and on a fixed schedule the following ones over four weeks, until the repeat ends. An "after completion" repeat shows its next day once the current one is done. A tap opens the repeat; they are not in the widget or the counts.
 
 ### Changed
 

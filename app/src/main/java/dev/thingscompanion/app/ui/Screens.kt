@@ -651,7 +651,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
     val openArea = areaId?.let { library?.area(it) }
     val rowActions = RowActions(
         selected = selection?.toSet(),
-        onOpen = { if (selection != null) toggleSelected(it.id) else taskId = it.id },
+        // A coming occurrence of a repeat (its template) is not picked: nothing can be done to it from the app.
+        onOpen = { if (selection == null) taskId = it.id else if (!it.isRecurrenceTemplate) toggleSelected(it.id) },
         onSetDone = viewModel::setDone,
         onTrash = viewModel::trash,
         onRestore = viewModel::restore,
@@ -1053,7 +1054,8 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                                 // To-dos closed today stay in place, struck through, as in Things.
                                 ListTab.TODAY -> library.today(today, closedOn = today)
                                 ListTab.INBOX -> library.inbox(closedOn = today)
-                                ListTab.UPCOMING -> library.upcoming(today, closedOn = today)
+                                // With the coming occurrences of repeating to-dos, as Things shows them.
+                                ListTab.UPCOMING -> (library.upcoming(today, closedOn = today) + library.repeatsAhead(today)).sortedBy { it.upcomingDay }
                                 ListTab.DEADLINES -> library.deadlines(closedOn = today)
                                 ListTab.ANYTIME -> library.anytime(today, closedOn = today)
                                 else -> library.someday(closedOn = today)
@@ -1093,7 +1095,7 @@ private fun LibraryScreen(state: UiState, viewModel: ThingsViewModel, snackbar: 
                             }
                             TaskList(
                                 library = library,
-                                header = { ListHeader(tab.kind, title, count = tasks.count { it.isOpen && it.type == TaskType.TODO }) },
+                                header = { ListHeader(tab.kind, title, count = tasks.count { it.isOpen && it.type == TaskType.TODO && !it.isRecurrenceTemplate }) },
                                 groups = groups,
                                 emptyText = stringResource(R.string.nothing_here),
                                 actions = rowActions,
@@ -1726,7 +1728,8 @@ private sealed interface ListRow {
 private data class HeaderRow(val group: Group, override val key: String) : ListRow
 
 private data class TaskItemRow(val task: Task) : ListRow {
-    override val key get() = task.id
+    // A repeat's coming occurrences are copies of its template, one per day.
+    override val key get() = if (task.isRecurrenceTemplate) "${task.id}@${task.startDate}" else task.id
 }
 
 /** The "New to-do" row ending a section. */
@@ -1987,6 +1990,8 @@ private fun WhenDialog(task: Task, onPick: (Schedule) -> Unit, onDismiss: () -> 
 @Composable
 private fun TaskRow(library: ThingsLibrary, task: Task, actions: RowActions, showWhen: Boolean) {
     val closed = !task.isOpen
+    // A repeat's coming occurrence, not created yet: in grey, as Things shows it.
+    val ahead = task.isRecurrenceTemplate
     Row(
         Modifier
             .fillMaxWidth()
@@ -2008,7 +2013,7 @@ private fun TaskRow(library: ThingsLibrary, task: Task, actions: RowActions, sho
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 textDecoration = if (closed) TextDecoration.LineThrough else null,
-                color = if (closed || task.trashed) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified,
+                color = if (closed || task.trashed || ahead) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified,
             )
             RowDetails(library, task, showWhen)
         }
@@ -2397,7 +2402,8 @@ private fun TaskDetail(
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val focusManager = LocalFocusManager.current
-    val textEditable = task.type == TaskType.TODO && !task.trashed
+    // A repeating template opened from Upcoming stays as Things manages it.
+    val textEditable = task.type == TaskType.TODO && !task.trashed && !task.isRecurrenceTemplate
     Column(
         modifier.imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -2644,7 +2650,8 @@ private fun NotesText(notes: String?, style: androidx.compose.ui.text.TextStyle,
 @Composable
 private fun whenFact(task: Task): Pair<ListKind, String> {
     val today = ThingsDay.today()
-    val startDate = task.startDate
+    // A repeating template: the day of its next occurrence.
+    val startDate = task.startDate ?: task.nextOccurrence.takeIf { task.isRecurrenceTemplate }
     return when {
         task.start == StartList.INBOX && startDate == null -> ListKind.INBOX to stringResource(R.string.list_inbox)
         startDate == null -> if (task.start == StartList.SOMEDAY) ListKind.SOMEDAY to stringResource(R.string.list_someday)
