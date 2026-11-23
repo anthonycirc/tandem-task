@@ -6,7 +6,7 @@ All notable changes to Tandem Task are listed here. The format follows [Keep a C
 
 ### Fixed
 
-- **Move a selection of projects.** With only projects selected, Move stayed greyed out. It now moves them to an area, or out of one; a repeating project stays as Things handles it.
+- **Move a selection of projects.** With only projects selected, Move stayed greyed out. It now moves them to an area, or out of one; a repeating project stays as Things handles it. "No area" can be picked for them: it was shown as their current place and greyed out.
 
 ## [0.6.0] - 2026-11-23
 
