@@ -486,9 +486,10 @@ fun DayPickerDialog(
     }
 }
 
+/** A reminder's time; with [onClear], a button takes the reminder off. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TimePickerDialog(initial: LocalTime, onPicked: (LocalTime) -> Unit, onDismiss: () -> Unit) {
+internal fun TimePickerDialog(initial: LocalTime, onPicked: (LocalTime) -> Unit, onDismiss: () -> Unit, onClear: (() -> Unit)? = null) {
     val state = rememberTimePickerState(initialHour = initial.hour, initialMinute = initial.minute)
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -497,13 +498,18 @@ private fun TimePickerDialog(initial: LocalTime, onPicked: (LocalTime) -> Unit, 
         confirmButton = {
             TextButton(onClick = { onPicked(LocalTime.of(state.hour, state.minute)) }) { Text(stringResource(R.string.ok)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        dismissButton = {
+            Row {
+                if (onClear != null) TextButton(onClick = onClear) { Text(stringResource(R.string.no_reminder)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            }
+        },
     )
 }
 
 /** A grid of emoji to lead the title with, and a choice to take it off. */
 @Composable
-private fun EmojiDialog(current: String?, onPick: (String?) -> Unit, onDismiss: () -> Unit) {
+internal fun EmojiDialog(current: String?, onPick: (String?) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.emoji_title)) },

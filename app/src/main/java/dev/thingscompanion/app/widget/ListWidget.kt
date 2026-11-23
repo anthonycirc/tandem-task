@@ -89,10 +89,20 @@ class ListWidget : GlanceAppWidget() {
                 .background(colors.background)
                 .padding(12.dp),
         ) {
+            val items = snapshot?.items(listKey).orEmpty()
             Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = listLabel(context, snapshot, listKey),
                     style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = colors.text),
+                    maxLines = 1,
+                    modifier = GlanceModifier.clickable(actionStartActivity(openApp(context))),
+                )
+                // How many open to-dos the list holds; ticked ones still waiting to be sent are left out.
+                val count = items.count { !ticks.isTicked(it.id) }
+                Text(
+                    text = if (count > 0) "  $count" else "",
+                    style = TextStyle(fontSize = 14.sp, color = colors.secondary),
+                    maxLines = 1,
                     modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity(openApp(context))),
                 )
                 // The list, theme and colour, changed from the widget itself.
@@ -110,7 +120,6 @@ class ListWidget : GlanceAppWidget() {
                     modifier = GlanceModifier.padding(horizontal = 8.dp).clickable(actionStartActivity(openApp(context, openAdd = true))),
                 )
             }
-            val items = snapshot?.items(listKey).orEmpty()
             when {
                 snapshot == null -> Message(context.getString(R.string.widget_open_app), colors)
                 items.isEmpty() -> Message(context.getString(R.string.nothing_here), colors)

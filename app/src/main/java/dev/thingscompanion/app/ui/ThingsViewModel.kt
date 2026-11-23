@@ -92,7 +92,10 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
     private val _state = MutableStateFlow(
         UiState(
             signedIn = repository.isSignedIn,
-            filter = TaskFilter(showClosed = displayPrefs.getBoolean(KEY_SHOW_CLOSED, true)),
+            filter = TaskFilter(
+                showClosed = displayPrefs.getBoolean(KEY_SHOW_CLOSED, true),
+                groupByProject = displayPrefs.getBoolean(KEY_GROUP_BY_PROJECT, false),
+            ),
             themeMode = displayPrefs.getString(KEY_THEME, null)
                 ?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
             tabOrder = displayPrefs.getString(KEY_TAB_ORDER, null)?.split(',')?.filter { it.isNotBlank() }.orEmpty(),
@@ -249,10 +252,11 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         projectId: String? = null,
         areaId: String? = null,
         tagIds: List<String> = emptyList(),
+        headingId: String? = null,
     ) {
         val taskId = newId()
         change(
-            PendingChange.AddTask(newId(), taskId, title, notes, PendingChange.When.of(schedule), reminder?.toSecondOfDay(), projectId = projectId, areaId = areaId, tagIds = tagIds),
+            PendingChange.AddTask(newId(), taskId, title, notes, PendingChange.When.of(schedule), reminder?.toSecondOfDay(), projectId = projectId, headingId = headingId, areaId = areaId, tagIds = tagIds),
             // Name the Inbox when that is where it went; elsewhere (Today, a date…) just confirm.
             done = if (schedule == Schedule.Inbox) R.string.added_to_inbox else R.string.added,
         )
@@ -291,6 +295,23 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         change(PendingChange.AddProject(newId(), id, title, notes, PendingChange.When.of(schedule), areaId, tagIds), done = R.string.added)
         deadline?.let { change(PendingChange.SetDeadline(newId(), id, it.toEpochDay())) }
     }
+
+    /** A to-do's or project's title or notes changed in place, in its sheet or header: When and reminder stay. */
+    fun rename(id: String, title: String, notes: String) {
+        val task = _state.value.library?.task(id) ?: return
+        change(PendingChange.EditTask(newId(), id, title, notes, PendingChange.When.of(Schedule.of(task, ThingsDay.today())), task.reminder?.toSecondOfDay()), done = R.string.saved)
+    }
+
+    /** A dated to-do's reminder set, changed or removed ([reminder] null) from its sheet. */
+    fun setReminder(id: String, reminder: LocalTime?) {
+        val task = _state.value.library?.task(id) ?: return
+        change(
+            PendingChange.EditTask(newId(), id, task.title, task.notes.orEmpty(), PendingChange.When.of(Schedule.of(task, ThingsDay.today())), reminder?.toSecondOfDay()),
+            done = R.string.saved,
+        )
+    }
+
+    fun renameChecklistItem(itemId: String, title: String) = change(PendingChange.RenameChecklistItem(newId(), itemId, title))
 
     fun addHeading(projectId: String, title: String) = change(PendingChange.AddHeading(newId(), newId(), projectId, title))
 
@@ -354,14 +375,26 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Cancels a to-do (or reopens a cancelled one), as a long press on its checkbox does in Things; the snackbar offers Undo. */
     fun setCancelled(id: String, cancelled: Boolean) {
-        val task = _state.value.library?.task(id) ?: return
+        val library = _state.value.library ?: return
+        val task = library.task(id) ?: return
         val undo = when (task.status) {
             TaskStatus.COMPLETED -> PendingChange.SetDone(newId(), id, true)
             TaskStatus.CANCELLED -> PendingChange.SetCancelled(newId(), id, true)
             TaskStatus.OPEN -> PendingChange.SetCancelled(newId(), id, false)
-        }
-        change(PendingChange.SetCancelled(newId(), id, cancelled), if (cancelled) R.string.marked_cancelled else R.string.marked_open, undo = undo)
+        }.takeIf { library.afterCompletionRule(task) == null } // Its template moved on: reopening it is left to Things.
+        change(
+            PendingChange.SetCancelled(newId(), id, cancelled, day = ThingsDay.today().toEpochDay()),
+            if (cancelled) R.string.marked_cancelled else R.string.marked_open,
+            undo = undo,
+        )
     }
+
+    /**
+     * A repeat's coming occurrence checked in Upcoming: Things gets a completed copy on that day and
+     * the repeat moves on. No Undo: the copy can be unchecked like any occurrence.
+     */
+    fun completeAhead(templateId: String, day: LocalDate) =
+        change(PendingChange.CompleteAhead(newId(), templateId, day.toEpochDay(), newId()), R.string.marked_done)
 
     /** Swipe to reschedule: the to-do's own title and notes, a new When; the reminder stays when there is still a day. */
     fun reschedule(id: String, schedule: Schedule) {
@@ -553,7 +586,7 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setFilter(filter: TaskFilter) {
-        displayPrefs.edit().putBoolean(KEY_SHOW_CLOSED, filter.showClosed).apply()
+        displayPrefs.edit().putBoolean(KEY_SHOW_CLOSED, filter.showClosed).putBoolean(KEY_GROUP_BY_PROJECT, filter.groupByProject).apply()
         _state.update { it.copy(filter = filter) }
     }
 
@@ -581,6 +614,7 @@ class ThingsViewModel(application: Application) : AndroidViewModel(application) 
         const val SEND_DELAY_MS = 8_000L
 
         const val KEY_SHOW_CLOSED = "show_closed"
+        const val KEY_GROUP_BY_PROJECT = "group_by_project"
         const val KEY_THEME = "theme"
         const val KEY_TAB_ORDER = "tab_order"
         const val KEY_HIDDEN_TABS = "hidden_tabs"

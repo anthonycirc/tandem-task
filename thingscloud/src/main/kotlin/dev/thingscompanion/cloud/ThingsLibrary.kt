@@ -50,6 +50,10 @@ data class Task(
     internal val repeatRuleJson: JsonObject? = null,
     /** Last change (`md`), epoch seconds. */
     val modifiedAt: Double? = null,
+    /** For a template: the day of its next occurrence, not created yet (`tir`). */
+    val nextOccurrence: LocalDate? = null,
+    /** For a template: how many occurrences Things made of it (`icc`). */
+    val instanceCount: Int? = null,
     internal val entity: String?,
 ) {
     val isOpen get() = status == TaskStatus.OPEN
@@ -87,8 +91,12 @@ class ThingsLibrary private constructor(
     private val areas: Map<String, Area>,
     private val tags: Map<String, Tag>,
     private val checklists: Map<String, List<ChecklistItem>>,
+    /** Repeating templates' props as stored: Things copies them as they are onto an occurrence checked ahead. */
+    private val templateProps: Map<String, JsonObject> = emptyMap(),
 ) {
     fun task(id: String): Task? = tasks[id]
+
+    internal fun storedTemplate(id: String): JsonObject? = templateProps[id]
 
     fun area(id: String): Area? = areas[id]
 
@@ -189,6 +197,58 @@ class ThingsLibrary private constructor(
                 (it.startDate == null && it.start != StartList.INBOX && it.deadline?.isAfter(today) == true)
             )
     }.sortedWith(compareBy<Task>({ it.upcomingDay }, { it.index }, { it.id }))
+
+    /**
+     * The coming occurrences of repeating to-dos, which Things shows in Upcoming before creating
+     * them: each template's next day ([Task.nextOccurrence]) and, on a fixed schedule, the
+     * following ones up to [horizonDays] after today, until the rule ends. Days already holding an
+     * occurrence, and today or earlier, are left out; an "after completion" repeat shows its next
+     * day only once no occurrence of it is open. Each is a copy of its template dated that day: read-only rows.
+     * Not part of [upcoming], which the widget and the counts read.
+     */
+    fun repeatsAhead(today: LocalDate, horizonDays: Long = 28): List<Task> {
+        val horizon = today.plusDays(horizonDays)
+        val instances = tasks.values.filter { it.recurrenceTemplateIds.isNotEmpty() && !it.trashed }
+        return tasks.values
+            .filter {
+                it.isTodo && it.isRecurrenceTemplate && it.isOpen && !it.trashed && !it.inTrashedContainer &&
+                    it.isCurrentEntity && it.title.isNotBlank()
+            }
+            .flatMap { template ->
+                val first = template.nextOccurrence?.takeIf { it.isAfter(today) } ?: return@flatMap emptyList()
+                val rule = repeatRule(template) ?: return@flatMap emptyList()
+                val mine = instances.filter { template.id in it.recurrenceTemplateIds }
+                if (rule.afterCompletion && mine.any { it.isOpen }) return@flatMap emptyList()
+                val taken = mine.mapNotNull { it.startDate }.toSet()
+                // With a deadline lead the rule's days are deadlines, not starts: only the next start is known.
+                if (rule.leadDays != 0) {
+                    val ended = rule.endDate != null && first.isAfter(rule.endDate)
+                    return@flatMap listOfNotNull(template.copy(startDate = first).takeIf { !ended && first !in mine.mapNotNull { it.startDate } })
+                }
+                val days = generateSequence(first) { day -> rule.nextAfter(day)?.takeIf { it.isAfter(day) } }
+                    .takeWhile { it == first || !it.isAfter(horizon) }
+                    .takeWhile { rule.endDate == null || !it.isAfter(rule.endDate) }
+                    .take(MAX_REPEATS_AHEAD)
+                days.filter { it !in taken }.map { template.copy(startDate = it) }.toList()
+            }
+            .sortedWith(compareBy<Task>({ it.startDate }, { it.index }, { it.id }))
+    }
+
+    /**
+     * Whether a coming occurrence from [repeatsAhead] can be checked before Things creates it, as
+     * Things 3.23+ does: the template's next one only, on a fixed schedule with no deadline lead,
+     * no deadline and no checklist (the writes seen in the history; the others are left to Things).
+     */
+    fun canCompleteAhead(occurrence: Task): Boolean {
+        val template = tasks[occurrence.id]?.takeIf { it.isRecurrenceTemplate } ?: return false
+        val day = occurrence.startDate ?: return false
+        val rule = repeatRule(template) ?: return false
+        return template.isTodo && template.isOpen && !template.trashed && !template.inTrashedContainer && template.isCurrentEntity &&
+            !rule.afterCompletion && rule.leadDays == 0 && template.deadline == null && checklist(template.id).isEmpty() &&
+            day == template.nextOccurrence && rule.nextAfter(day)?.let { next -> next.isAfter(day) && (rule.endDate == null || !next.isAfter(rule.endDate)) } == true &&
+            templateProps[template.id] != null &&
+            instancesOf(template.id).none { it.startDate == day && !it.trashed }
+    }
 
     /** What Things counts next to its lists (open items only). */
     fun counts(today: LocalDate): ListCounts = ListCounts(
@@ -323,6 +383,20 @@ class ThingsLibrary private constructor(
         return if (all.isEmpty()) 0f else all.count { !it.isOpen }.toFloat() / all.size
     }
 
+    /**
+     * [tasks] classed by project, as the lists show them grouped: to-dos in no project or area
+     * first (key null), then the sidebar's order: projects with no area, then each area (its own
+     * to-dos, then its projects'). Each group keeps [tasks]' order; places with none are left out.
+     */
+    fun byProject(tasks: List<Task>): List<Pair<String?, List<Task>>> {
+        val groups = tasks.groupBy { it.projectId ?: it.areaId }
+        val sidebar = listOf(null) + projects().filter { it.areaId == null }.map { it.id } +
+            areas().flatMap { area -> listOf(area.id) + areaProjects(area.id).map { it.id } }
+        // A place the sidebar no longer lists (a project closed today) goes last.
+        val order = sidebar.filter { it in groups } + groups.keys.filter { it !in sidebar }
+        return order.map { it to groups.getValue(it) }
+    }
+
     /** An area's open projects, in Things' order. */
     fun areaProjects(areaId: String): List<Task> = projects().filter { it.areaId == areaId }
 
@@ -385,6 +459,9 @@ class ThingsLibrary private constructor(
     companion object {
         private const val MIN_TASK_ENTITY_VERSION = 6
 
+        /** At most this many coming occurrences of one repeat (a daily one over four weeks). */
+        private const val MAX_REPEATS_AHEAD = 31
+
         // Older areas and tags (Area2, Tag3) were replaced by Things' migration and are gone from its apps.
         private const val MIN_AREA_ENTITY_VERSION = 3
         private const val MIN_TAG_ENTITY_VERSION = 4
@@ -442,6 +519,8 @@ class ThingsLibrary private constructor(
                     repeatType = (p["rr"] as? JsonObject)?.let { it.int("tp") ?: -1 },
                     repeatRuleJson = p["rr"] as? JsonObject,
                     modifiedAt = p["md"].primitiveOrNull()?.doubleOrNull,
+                    nextOccurrence = p.day("tir"),
+                    instanceCount = p.int("icc"),
                     entity = obj.entity,
                 )
             }
@@ -466,7 +545,8 @@ class ThingsLibrary private constructor(
                 .groupBy({ it.first }, { it.second })
                 .mapValues { (_, items) -> items.sortedBy { it.index } }
 
-            return ThingsLibrary(tasks, areas, tags, checklists)
+            val templateProps = rawTasks.filterKeys { tasks[it]?.isRecurrenceTemplate == true }.mapValues { (_, obj) -> JsonObject(obj.props) }
+            return ThingsLibrary(tasks, areas, tags, checklists, templateProps)
         }
 
         private fun Map<String, JsonElement>.int(key: String): Int? = this[key].primitiveOrNull()?.intOrNull

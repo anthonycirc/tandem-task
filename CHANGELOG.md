@@ -2,6 +2,22 @@
 
 All notable changes to Tandem Task are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-11-23
+
+### Added
+
+- **Counts in the headers.** Today and the other lists, a project and an area show how many open to-dos they hold next to their name; so does the widget's header, next to the list's name.
+- **Group by project.** A switch in the filters classes the to-dos of Today, the Inbox, Anytime and Someday by project, each group under its project's (or area's) name: to-dos in no project first, then the sidebar's order. Today keeps This Evening apart. Dragging to reorder is off while grouped.
+- **Search in the pickers.** The filters' tags and project or area, and the place picker (Move, a new to-do's place), each have a search field: type part of a name, accents and case aside. A heading is found with its project's name.
+- **New to-do where you are.** In a project, each section and each heading ends with a "New to-do" row: the form opens with the to-do filed there, under that heading. An area's list ends with one too.
+- **Repeating to-dos in Upcoming.** As in Things, Upcoming shows the coming occurrences of repeating to-dos before they are created, in grey on their days: the next one, and on a fixed schedule the following ones over four weeks, until the repeat ends. An "after completion" repeat shows its next day once the current one is done. A tap opens the repeat; they are not in the widget or the counts.
+- **Check a repeating to-do ahead.** As in Things 3.23, the next occurrence of a repeating to-do can be checked in Upcoming before its day: Things gets a completed copy on that day, and the repeat moves on to the following one. For repeats on a fixed schedule with no deadline and no checklist; the others stay as Things handles them.
+
+### Changed
+
+- **No more Edit button: change things in place.** In a to-do's sheet, a tap on the title, the notes or a checklist item turns it into a field; Done, a tap elsewhere or closing the sheet saves it. The emoji picker sits next to the title being edited. The reminder (when the to-do has a day) and the deadline show in grey when unset, and a tap sets them; the reminder's picker can also remove it. A project's title and notes change the same way in its header, which now shows the notes, and its ⋯ menu adds a deadline.
+- **Cancel any repeating to-do.** A long press on the checkbox now cancels "after completion" repeats too: the next one is set from the day of the cancel, as Things does when one is cancelled on the Mac or the iPhone. Undo is not offered for these, since their next one is already set; reopen it in Things if needed.
+
 ## [0.5.4] - 2026-11-21
 
 ### Added

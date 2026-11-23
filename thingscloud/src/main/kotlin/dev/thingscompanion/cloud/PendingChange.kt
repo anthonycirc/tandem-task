@@ -195,18 +195,50 @@ sealed interface PendingChange {
         }
     }
 
-    /** A to-do cancelled, or reopened after a cancel, as Things writes it ({ss, sp, md}); repeats moving on after completion are left to Things. */
+    /**
+     * A to-do cancelled, or reopened after a cancel, as Things writes it ({ss, sp, md}). Cancelling an
+     * "after completion" occurrence moves its template on as checking it does: Things' own cancels
+     * in the history carry the same {acrd, tir}. Reopening one is left to Things.
+     */
     @Serializable
     @SerialName("cancel")
-    data class SetCancelled(override val opId: String, val taskId: String, val cancelled: Boolean) : PendingChange {
+    data class SetCancelled(
+        override val opId: String,
+        val taskId: String,
+        val cancelled: Boolean,
+        /** The local day of the long press (epoch day): an "after completion" repeat counts from it, even if sent later. */
+        val day: Long? = null,
+    ) : PendingChange {
         override val replaces get() = "done:$taskId"
 
         override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
             val task = library.task(taskId) ?: throw NoSuchElementException("The to-do no longer exists.")
             // Reopening only undoes a cancel; a completed to-do is unchecked with SetDone.
             if (cancelled == (task.status == TaskStatus.CANCELLED) || (!cancelled && task.status != TaskStatus.CANCELLED)) return null
-            require(library.canComplete(task) && library.afterCompletionRule(task) == null) { "This to-do can't be cancelled from the app." }
-            return mapOf(taskId to TaskEdits.setStatus(task, if (cancelled) TaskStatus.CANCELLED else TaskStatus.OPEN, now))
+            require(library.canComplete(task) && (cancelled || library.afterCompletionRule(task) == null)) { "This to-do can't be cancelled from the app." }
+            val change = mapOf(taskId to TaskEdits.setStatus(task, if (cancelled) TaskStatus.CANCELLED else TaskStatus.OPEN, now))
+            val (template, rule) = library.afterCompletionRule(task) ?: return change
+            val cancelledOn = day?.let(LocalDate::ofEpochDay) ?: ThingsDay.today(Instant.ofEpochMilli((now * 1000).toLong()))
+            return change + (template.id to TaskEdits.afterCompletion(template, rule, cancelledOn))
+        }
+    }
+
+    /**
+     * A repeating to-do's coming occurrence checked in Upcoming before Things created it, as Things 3.23+
+     * does: a completed copy of the template on [day] (epoch day), [copyId], and the template moved on.
+     */
+    @Serializable
+    @SerialName("complete_ahead")
+    data class CompleteAhead(override val opId: String, val templateId: String, val day: Long, val copyId: String) : PendingChange {
+        override val replaces get() = "ahead:$templateId:$day"
+
+        override fun build(library: ThingsLibrary, now: Double): Map<String, JsonObject>? {
+            if (library.task(copyId) != null) return null
+            val template = library.task(templateId) ?: throw NoSuchElementException("The repeating to-do no longer exists.")
+            val on = LocalDate.ofEpochDay(day)
+            require(library.canCompleteAhead(template.copy(startDate = on))) { "This occurrence can't be checked ahead from the app." }
+            val next = requireNotNull(library.repeatRule(template)?.nextAfter(on))
+            return TaskEdits.completeAhead(template, requireNotNull(library.storedTemplate(templateId)), on, next, copyId, now)
         }
     }
 

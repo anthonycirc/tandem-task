@@ -44,6 +44,35 @@ class RepeatCompleteTest {
         assertEquals(1, payload.getValue("tmpl")["t"].toString().toInt())
     }
 
+    private fun cancel(rr: String, day: Long? = null, at: Double = now) = PendingChange.SetCancelled("op", "inst", true, day = day).build(library(rr), at)!!
+
+    @Test
+    fun `cancelling an after-completion instance moves its template on as checking it does, as Things writes it`() {
+        // Things' own cancels in the history: the instance {ss 2, sp, md}, its template {acrd, tir} in the same item.
+        val payload = cancel("""{"tp": 1, "fu": 16, "fa": 1}""")
+
+        assertEquals(setOf("inst", "tmpl"), payload.keys)
+        assertEquals(setOf("ss", "sp", "md"), props(payload, "inst").keys)
+        assertEquals(JsonPrimitive(2), props(payload, "inst")["ss"])
+        assertEquals<Map<String, Any>>(mapOf("acrd" to JsonPrimitive(d15), "tir" to JsonPrimitive(d15 + day)), props(payload, "tmpl"))
+        assertEquals(1, payload.getValue("tmpl")["t"].toString().toInt())
+        assertEquals(JsonPrimitive(d15 + 7 * day), props(cancel("""{"tp": 1, "fu": 256, "fa": 1}"""), "tmpl")["tir"])
+    }
+
+    @Test
+    fun `a cancel counts from the day of the long press, even when sent after midnight`() {
+        val tappedOn = java.time.LocalDate.ofEpochDay(d15 / day).toEpochDay()
+        val payload = cancel("""{"tp": 1, "fu": 16, "fa": 2}""", day = tappedOn, at = now + day)
+        assertEquals(JsonPrimitive(d15), props(payload, "tmpl")["acrd"])
+        assertEquals(JsonPrimitive(d15 + 2 * day), props(payload, "tmpl")["tir"])
+    }
+
+    @Test
+    fun `a cancelled after-completion instance is not reopened from the app`() {
+        val cancelled = library("""{"tp": 1, "fu": 16, "fa": 1}""", instanceExtra = ""","ss": 2, "sp": $d15""")
+        assertFailsWith<IllegalArgumentException> { PendingChange.SetCancelled("op", "inst", false).build(cancelled, now) }
+    }
+
     @Test
     fun `the next start is the interval in days or weeks after the completion day`() {
         assertEquals(JsonPrimitive(d15 + 2 * day), props(complete("""{"tp": 1, "fu": 16, "fa": 2}"""), "tmpl")["tir"])
